@@ -266,6 +266,25 @@ details.guide[open] summary::before{content:"-"}
 .scroll{overflow-x:auto}
 .mismatch{margin-top:12px;font-size:13px;color:#FDE68A}
 
+
+.syncstate{font-size:12px;color:var(--faint);white-space:nowrap}
+.syncstate.warn{color:var(--amber)}
+.syncstate.error{color:var(--red)}
+.top-sync{margin-right:8px}
+body[data-auth="out"] .auth-only{display:none !important}
+.auth-card{max-width:440px;margin:6vh auto 0;border:1px solid var(--line);border-radius:var(--r-lg);background:var(--raise);padding:32px}
+.linkbtn{background:none;border:0;padding:0;color:var(--purple-soft);font-weight:500;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+.menu-who{padding:10px 12px;font-size:12px;color:var(--faint);border-bottom:1px solid var(--line);margin-bottom:4px}
+.menu-who b{color:var(--text);font-weight:500;font-size:13px;word-break:break-all}
+.hlist{list-style:none;margin:0;padding:0}
+.hlist li{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:14px 0;border-bottom:1px solid var(--line)}
+.hlist li:last-child{border-bottom:0}
+.hlist .meta{white-space:normal;margin-top:2px}
+.teamgrid{display:grid;grid-template-columns:2fr 1fr auto;gap:16px;align-items:end}
+.panel .left.syncstate{display:block;white-space:normal}
+@media (max-width:760px){.top-sync{display:none}}
+@media (max-width:600px){#nav-list{display:none}.teamgrid{grid-template-columns:1fr}.auth-card{padding:24px;margin-top:3vh}.hlist li{flex-direction:column;align-items:flex-start}}
+
 /* Toasts */
 #toasts{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(24px + env(safe-area-inset-bottom,0px));z-index:80;display:flex;flex-direction:column;gap:8px;align-items:center;width:min(92vw,520px);pointer-events:none}
 .toast{pointer-events:auto;background:var(--raise-2);border:1px solid var(--line-2);border-radius:var(--r);padding:12px 16px;font-size:14px;display:flex;gap:16px;align-items:center;justify-content:space-between;width:100%;box-shadow:0 12px 40px rgba(0,0,0,.6)}
@@ -329,13 +348,15 @@ details.guide[open] summary::before{content:"-"}
 }
 </style>
 </head>
-<body>
+<body data-auth="out">
 <header class="top">
   <div class="top-in">
     <a class="brand" href="#/"><b>troo<i>pod</i></b><span>KAM interviews</span></a>
     <nav aria-label="Main">
-      <a class="navlink" id="nav-list" href="#/">Candidates</a>
-      <a class="btn primary sm" href="#/new">New interview</a>
+      <span class="syncstate auth-only top-sync" aria-live="polite"></span>
+      <a class="navlink auth-only" id="nav-list" href="#/">Candidates</a>
+      <a class="btn primary sm auth-only" href="#/new">New interview</a>
+      <div class="menu auth-only"><button class="btn ghost sm" type="button" data-act="menu" aria-haspopup="true" aria-expanded="false">Account</button><div class="menu-list" role="menu" id="acct-list"></div></div>
     </nav>
   </div>
 </header>
@@ -343,6 +364,7 @@ details.guide[open] summary::before{content:"-"}
 <div id="toasts" aria-live="polite"></div>
 <input type="file" id="importFile" accept=".json,application/json" hidden>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script>
 (function(){
 'use strict';
@@ -406,17 +428,22 @@ const uid=()=>(window.crypto&&crypto.randomUUID)?crypto.randomUUID():'id'+Date.n
 const todayISO=()=>{const d=new Date();return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10)};
 const fmtDate=iso=>{if(!iso)return'';const d=new Date(String(iso).length===10?iso+'T00:00:00':iso);return isNaN(d)?'':d.toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'})};
 const fmtTime=ts=>new Date(ts).toLocaleTimeString('en-IN',{hour:'numeric',minute:'2-digit'});
+const fmtDT=ts=>new Date(ts).toLocaleString('en-IN',{day:'numeric',month:'short',year:'numeric',hour:'numeric',minute:'2-digit'});
 const fmtS=v=>v==null?'\u2013':v.toFixed(2);
 const str=(v,max)=>typeof v==='string'?v.trim().slice(0,max):'';
 const EMAIL_RE=/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const toneOf=v=>v==null?'muted':v<2.5?'red':v<3?'amber':'purple';
 const app=$('#app');
 
-/* ---------- Storage ---------- */
-const KEY='troopod-kam-interviews-v1';
+/* ---------- Config ---------- */
+const SB_URL='https://ktropcqutvnbmekjindt.supabase.co';
+const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt0cm9wY3F1dHZuYm1la2ppbmR0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE4OTAwOTAsImV4cCI6MjA5NzQ2NjA5MH0.wE0gKMIEeZzX-XHTMcblkBZJVXKgbG5Y-KCnZ8VJ5zE';
+const KEY='troopod-kam-interviews-v1',DIRTY_KEY='troopod-kam-dirty-v1',PULL_KEY='troopod-kam-lastpull-v1',MEMBER_KEY='troopod-kam-member-v1',FORM_KEY='troopod-kam-form-draft-v1',SYNCED_BY='troopod-kam-synced-by-v1';
+
+/* ---------- Device storage ---------- */
 let storageOK=(function(){try{const k='__kam_t';localStorage.setItem(k,'1');localStorage.removeItem(k);return true}catch(e){return false}})();
-let DB=null, saveTimer=null, saveState='idle', lastSaved=null, startNotice='';
-const deleted=new Set();
+const ls={get:k=>{try{return localStorage.getItem(k)}catch(e){return null}},set:(k,v)=>{try{localStorage.setItem(k,v);return true}catch(e){return false}},del:k=>{try{localStorage.removeItem(k)}catch(e){}}};
+let DB=null,saveTimer=null,startNotice='';
 
 function emptyDB(){return{v:1,interviews:[],interviewers:[],lastInterviewer:''}}
 function cleanIv(x){
@@ -436,73 +463,177 @@ function cleanIv(x){
     date:/^\d{4}-\d{2}-\d{2}$/.test(x.date)?x.date:todayISO(),tenure:t,round:Math.max(1,parseInt(x.round,10)||1),
     status,scores,notes,summary:typeof x.summary==='string'?x.summary.slice(0,6000):'',
     rec:['hire','hold','no'].includes(x.rec)?x.rec:'',
-    createdAt:+x.createdAt||Date.now(),updatedAt:+x.updatedAt||Date.now(),completedAt:status==='completed'?(+x.completedAt||Date.now()):null
+    createdAt:+x.createdAt||Date.now(),updatedAt:+x.updatedAt||Date.now(),completedAt:status==='completed'?(+x.completedAt||Date.now()):null,
+    createdBy:str(x.createdBy,120),deleted:!!x.deleted,deletedAt:x.deleted?(+x.deletedAt||Date.now()):null
   };
 }
 function normalize(d){
   if(!d||typeof d!=='object'||!Array.isArray(d.interviews))throw new Error('not a backup');
-  const out=emptyDB();
-  out.interviews=d.interviews.map(cleanIv).filter(Boolean);
-  const seen=new Set();out.interviews=out.interviews.filter(i=>!seen.has(i.id)&&seen.add(i.id));
+  const out=emptyDB();const seen=new Set();
+  out.interviews=d.interviews.map(cleanIv).filter(i=>i&&!seen.has(i.id)&&seen.add(i.id));
   out.interviewers=Array.isArray(d.interviewers)?[...new Set(d.interviewers.filter(s=>typeof s==='string'&&s.trim()).map(s=>s.trim().slice(0,60)))].slice(0,50):[];
   out.lastInterviewer=str(d.lastInterviewer,60);
   return out;
 }
 function readStore(){
   if(!storageOK)return null;
-  let raw;try{raw=localStorage.getItem(KEY)}catch(e){storageOK=false;return null}
-  if(!raw)return null;
+  const raw=ls.get(KEY);if(!raw)return null;
   try{return normalize(JSON.parse(raw))}
-  catch(e){
-    try{localStorage.setItem(KEY+'-unreadable-'+Date.now(),raw)}catch(_){}
-    startNotice='Saved interviews could not be read, so a copy was set aside and the app started fresh.';
-    return null;
-  }
+  catch(e){ls.set(KEY+'-unreadable-'+Date.now(),raw);startNotice='Interviews saved on this device could not be read. A copy was set aside; the cloud copy is used instead.';return null}
 }
 function mergeIn(other){
-  if(!other)return{added:0,updated:0};
-  const map=new Map(DB.interviews.map(i=>[i.id,i]));let added=0,updated=0;
+  const res={added:0,updated:0,ids:[]};if(!other)return res;
+  const idx=new Map(DB.interviews.map((i,k)=>[i.id,k]));
   for(const o of other.interviews){
-    if(deleted.has(o.id))continue;
-    const m=map.get(o.id);
-    if(!m){map.set(o.id,o);added++}
-    else if(o.updatedAt>m.updatedAt){map.set(o.id,o);updated++}
+    const k=idx.get(o.id);
+    if(k==null){DB.interviews.push(o);idx.set(o.id,DB.interviews.length-1);res.added++;res.ids.push(o.id)}
+    else if(o.updatedAt>DB.interviews[k].updatedAt){DB.interviews[k]=o;res.updated++;res.ids.push(o.id)}
   }
-  DB.interviews=[...map.values()];
-  DB.interviewers=[...new Set([...DB.interviewers,...other.interviewers])].slice(0,50);
-  if(!DB.lastInterviewer)DB.lastInterviewer=other.lastInterviewer;
-  return{added,updated};
+  DB.interviewers=[...new Set([...DB.interviewers,...(other.interviewers||[])])].slice(0,50);
+  if(!DB.lastInterviewer)DB.lastInterviewer=other.lastInterviewer||'';
+  return res;
 }
 function saveDB(){
   clearTimeout(saveTimer);saveTimer=null;
-  if(!storageOK){setSave('off');return false}
+  if(!storageOK)return false;
   mergeIn(readStore());
-  try{localStorage.setItem(KEY,JSON.stringify(DB));lastSaved=Date.now();setSave('saved');return true}
-  catch(e){setSave('error');toast('Could not save. Browser storage is full. Back up your data, then delete old interviews.','error');return false}
+  if(!ls.set(KEY,JSON.stringify(DB))){toast('This device is out of storage space. Your work is still going to the cloud.','error');return false}
+  return true;
 }
-function queueSave(){setSave('saving');clearTimeout(saveTimer);saveTimer=setTimeout(saveDB,400)}
+function queueSave(){clearTimeout(saveTimer);saveTimer=setTimeout(saveDB,300)}
 function flushSave(){if(saveTimer)saveDB()}
-function setSave(s){
-  saveState=s;const el=$('#savestate');if(!el)return;
-  el.className='savestate'+(s==='error'||s==='off'?' error':'');
-  el.textContent=s==='saving'?'Saving':s==='saved'?'Saved '+fmtTime(lastSaved):s==='error'?'Not saved':s==='off'?'Not saved, storage is off':'';
+const live=()=>DB.interviews.filter(i=>!i.deleted);
+const getIv=id=>DB.interviews.find(i=>i.id===id);
+
+/* ---------- Cloud sync ---------- */
+const cloud={mode:'loading',user:null,email:'',member:null,owner:false,state:'idle',last:null,msg:''};
+let sb=null,pushTimer=null,pushing=false,pushAgain=false,retry=0,retryTimer=null,syncing=false;
+const dirty=new Set((()=>{try{const a=JSON.parse(ls.get(DIRTY_KEY)||'[]');return Array.isArray(a)?a:[]}catch(e){return[]}})());
+const saveDirty=()=>ls.set(DIRTY_KEY,JSON.stringify([...dirty]));
+const cloudReady=()=>cloud.mode==='cloud'&&!!cloud.user&&cloud.member!==false&&!!sb;
+
+function setSync(state,msg){
+  cloud.state=state;if(msg!=null)cloud.msg=msg;
+  let text,cls='';
+  if(cloud.mode==='local'){text='Saved on this device only';cls='warn'}
+  else if(state==='synced'){text='Saved to cloud'+(cloud.last?' '+fmtTime(cloud.last):'')}
+  else if(state==='pending'||state==='syncing'){text='Saving'}
+  else if(state==='offline'){text='Offline, saved on this device';cls='warn'}
+  else if(state==='expired'){text='Sign in again to sync';cls='error'}
+  else if(state==='error'){text='Not in cloud yet, retrying';cls='error'}
+  else text='';
+  $$('.syncstate').forEach(el=>{el.textContent=text;el.classList.remove('warn','error');if(cls)el.classList.add(cls);el.title=state==='error'?cloud.msg:''});
 }
-window.addEventListener('pagehide',flushSave);
-document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')flushSave()});
-window.addEventListener('beforeunload',e=>{
-  flushSave();
-  if(!storageOK&&DB.interviews.length){e.preventDefault();e.returnValue=''}
-});
-window.addEventListener('storage',e=>{
-  if(e.key!==KEY||saveTimer)return;
-  const other=readStore();if(!other)return;
-  const ids=new Set(other.interviews.map(i=>i.id));
-  DB.interviews=DB.interviews.filter(i=>ids.has(i.id));
-  const r=mergeIn(other);
-  const view=currentView();
-  if(view.id&&!getIv(view.id)){toast('This interview was deleted in another tab.');location.hash='#/';return}
-  if(r.added||r.updated||true){const y=window.scrollY;route();window.scrollTo(0,y);toast('Updated from another tab.')}
-});
+function touch(iv){
+  iv.updatedAt=Date.now();
+  dirty.add(iv.id);saveDirty();queueSave();queuePush();
+}
+function queuePush(delay){
+  if(!cloudReady()){if(cloud.mode==='cloud'&&cloud.user)setSync(navigator.onLine?cloud.state:'offline');return}
+  setSync('pending');clearTimeout(pushTimer);pushTimer=setTimeout(push,delay==null?700:delay);
+}
+async function push(){
+  clearTimeout(pushTimer);pushTimer=null;
+  if(!cloudReady())return;
+  if(pushing){pushAgain=true;return}
+  if(!dirty.size){setSync('synced');return}
+  if(!navigator.onLine){setSync('offline');return}
+  pushing=true;setSync('syncing');
+  const ids=[...dirty],snap=new Map(),rows=[];
+  for(const id of ids){const iv=getIv(id);if(!iv){dirty.delete(id);continue}snap.set(id,iv.updatedAt);rows.push({id:iv.id,data:iv,deleted:!!iv.deleted})}
+  try{
+    for(let i=0;i<rows.length;i+=50){
+      const{error}=await sb.from('kam_interviews').upsert(rows.slice(i,i+50),{onConflict:'id'});
+      if(error)throw error;
+    }
+    for(const[id,u]of snap){const iv=getIv(id);if(!iv||iv.updatedAt===u)dirty.delete(id)}
+    saveDirty();retry=0;cloud.last=Date.now();ls.set(SYNCED_BY,cloud.email);
+    setSync(dirty.size?'pending':'synced');
+  }catch(e){
+    const kind=handleCloudError(e);
+    if(kind!=='denied'&&kind!=='expired'){retry++;clearTimeout(retryTimer);retryTimer=setTimeout(push,Math.min(60000,2500*Math.pow(2,retry)))}
+  }finally{
+    pushing=false;
+    if(pushAgain||(dirty.size&&cloud.state==='pending')){pushAgain=false;queuePush(300)}
+  }
+}
+async function pull(full){
+  if(!cloudReady()||!navigator.onLine)return;
+  const lastPull=full?null:ls.get(PULL_KEY);
+  let from=0,newest=lastPull,changed=[];
+  for(;;){
+    let q=sb.from('kam_interviews').select('id,data,deleted,updated_at').order('updated_at',{ascending:true}).range(from,from+999);
+    if(lastPull)q=q.gt('updated_at',new Date(Date.parse(lastPull)-5000).toISOString());
+    const{data,error}=await q;if(error)throw error;
+    for(const r of data){
+      const iv=cleanIv(Object.assign({},r.data,{id:r.id,deleted:r.deleted}));if(!iv)continue;
+      const k=DB.interviews.findIndex(i=>i.id===iv.id);
+      if(k<0){DB.interviews.push(iv);changed.push(iv.id)}
+      else if(iv.updatedAt>DB.interviews[k].updatedAt){DB.interviews[k]=dirty.has(iv.id)?combine(DB.interviews[k],iv):iv;changed.push(iv.id)}
+      newest=r.updated_at;
+    }
+    if(data.length<1000)break;from+=1000;
+  }
+  if(newest)ls.set(PULL_KEY,newest);
+  if(changed.length){saveDirty();saveDB();rerenderKeep(changed)}
+  cloud.last=Date.now();
+}
+async function sync(full){
+  if(!cloudReady()||syncing)return;
+  syncing=true;
+  try{await pull(full)}catch(e){handleCloudError(e)}
+  finally{syncing=false}
+  if(dirty.size)await push();else if(cloud.state!=='error'&&cloud.state!=='offline'&&cloud.state!=='expired')setSync('synced');
+  else if(navigator.onLine&&cloud.state==='offline')setSync('synced');
+}
+function handleCloudError(e){
+  const m=(e&&(e.message||e.error_description||e.hint))||String(e),code=e&&e.code;
+  if(!navigator.onLine||/failed to fetch|networkerror|load failed|network request/i.test(m)){setSync('offline');return'offline'}
+  if(code==='PGRST301'||/jwt|token is expired|invalid claim/i.test(m)){
+    sb.auth.refreshSession().then(({error})=>{if(error){setSync('expired');toast('Your sign-in expired. Sign in again; your changes are kept on this device.','error')}else queuePush(300)});
+    return'expired';
+  }
+  if(code==='42501'||/row-level security|permission denied/i.test(m)){
+    cloud.member=false;setSync('error','No access');route();return'denied';
+  }
+  setSync('error',/50[234]|timeout|upstream/i.test(m)?'The cloud database is not responding. It may be paused.':m);
+  return'error';
+}
+/* Both sides edited the same interview before syncing: keep every answer either side typed */
+function combine(l,r){
+  const m=JSON.parse(JSON.stringify(r));
+  for(const n of QN){
+    if(l.scores[n])m.scores[n]=l.scores[n];
+    const ln=l.notes[n]||'',rn=r.notes[n]||'';
+    if(ln&&ln!==rn)m.notes[n]=!rn||ln.includes(rn)?ln:rn.includes(ln)?rn:ln+'\n'+rn;
+  }
+  if(l.summary&&l.summary!==r.summary)m.summary=!r.summary||l.summary.includes(r.summary)?l.summary:r.summary.includes(l.summary)?r.summary:l.summary+'\n'+r.summary;
+  if(l.rec)m.rec=l.rec;
+  if(Object.keys(m.scores).length<QN.length){m.status='draft';m.completedAt=null}
+  m.updatedAt=Date.now();
+  return cleanIv(m);
+}
+function softUpdate(iv){
+  for(const q of QS){
+    const card=$('#q-'+q.n);if(!card)continue;const s=iv.scores[q.n];
+    card.classList.toggle('scored',!!s);$$('[data-score]',card).forEach(b=>b.setAttribute('aria-checked',+b.dataset.score===s));
+    const ta=$('#n-'+q.n);if(ta&&document.activeElement!==ta&&ta.value!==(iv.notes[q.n]||''))ta.value=iv.notes[q.n]||'';
+  }
+  const sm=$('#summary');if(sm&&document.activeElement!==sm&&sm.value!==iv.summary)sm.value=iv.summary;
+  $$('[data-rec]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.rec===iv.rec));
+  refresh(iv);
+}
+function rerenderKeep(ids){
+  const v=currentView();
+  if(v.v==='i'){
+    const iv=getIv(v.id);
+    if(!iv||iv.deleted){toast('This interview was deleted on another device.');notFound(iv);return}
+    if(ids.includes(v.id))softUpdate(iv);
+    return;
+  }
+  if(v.v==='new'||v.v==='edit'||v.v==='team'||v.v==='h')return;
+  const y=window.scrollY;route();window.scrollTo(0,y);
+}
 
 /* ---------- Scoring ---------- */
 function calc(iv){
@@ -530,10 +661,6 @@ function calc(iv){
   else v={key:'track',label:'On track so far',tone:'purple',why:'Every gate passes on the answers scored so far.'};
   return{pil,total,answered,complete,gates,pauses,verdict:v};
 }
-
-/* ---------- Data helpers ---------- */
-const getIv=id=>DB.interviews.find(i=>i.id===id);
-function touch(iv){iv.updatedAt=Date.now();queueSave()}
 function rememberInterviewer(name){
   if(!name)return;DB.lastInterviewer=name;
   DB.interviewers=[name,...DB.interviewers.filter(n=>n.toLowerCase()!==name.toLowerCase())].slice(0,50);
@@ -545,34 +672,142 @@ function toast(msg,kind,action){
   t.setAttribute('role',kind==='error'?'alert':'status');
   const sp=document.createElement('span');sp.textContent=msg;t.appendChild(sp);
   if(action){const b=document.createElement('button');b.type='button';b.textContent=action.label;b.onclick=()=>{action.fn();t.remove()};t.appendChild(b)}
-  $('#toasts').appendChild(t);setTimeout(()=>t.remove(),action?7000:4200);
+  $('#toasts').appendChild(t);setTimeout(()=>t.remove(),action?8000:4500);
 }
 
 /* ---------- Router ---------- */
 function currentView(){const h=location.hash.replace(/^#\/?/,'').split('/');return{v:h[0]||'',id:h[1]?decodeURIComponent(h[1]):''}}
 function route(){
-  flushSave();closeMenus();
-  const {v,id}=currentView();
-  $('#nav-list').toggleAttribute('aria-current',false);
+  flushSave();closeMenus();closeSheet();renderAccount();
+  const{v,id}=currentView();
+  if(cloud.mode==='loading')return viewLoading();
+  if(cloud.mode==='cloud'){
+    if(!cloud.user)return viewLogin();
+    if(cloud.member===false)return viewNoAccess();
+  }
+  $('#nav-list').removeAttribute('aria-current');
   if(v===''||v==='list'){$('#nav-list').setAttribute('aria-current','page');return viewList()}
   if(v==='new')return viewForm(null);
   if(v==='edit')return viewForm(id);
   if(v==='i')return viewInterview(id);
   if(v==='r')return viewReport(id);
-  location.hash='#/';
+  if(v==='h')return viewHistory(id);
+  if(v==='trash')return viewTrash();
+  if(v==='team')return viewTeam();
+  location.replace('#/');
 }
 window.addEventListener('hashchange',()=>{route();window.scrollTo(0,0)});
-function notFound(){toast('That interview no longer exists. It may have been deleted.','error');location.replace('#/')}
-function storageBanner(){return storageOK?'':'<div class="banner">This browser is blocking storage (private window or strict settings). Interviews will be lost when you close this tab. Use Back up data before you leave, or open the site in a normal window.</div>'}
+function notFound(iv){
+  if(iv&&iv.deleted){toast('That interview is in Recently deleted.');location.replace('#/trash');return}
+  toast('That interview could not be found.','error');location.replace('#/');
+}
+function banners(){
+  let b='';
+  if(cloud.mode==='local')b+='<div class="banner">Cloud saving could not load (no internet, or a blocker). Interviews are saved on this device only until the page loads with a connection.</div>';
+  if(!storageOK)b+='<div class="banner">This browser blocks device storage (private window or an in-app browser). Everything still saves to the cloud while you are online.</div>';
+  return b;
+}
+function renderAccount(){
+  document.body.dataset.auth=(cloud.mode==='local'||(cloud.user&&cloud.member!==false))?'in':'out';
+  const el=$('#acct-list');if(!el)return;
+  const trash=DB?DB.interviews.filter(i=>i.deleted).length:0;
+  el.innerHTML=(cloud.user?`<div class="menu-who">Signed in as<br><b>${esc(cloud.email)}</b></div>`:'')+
+    (cloud.owner?`<button type="button" role="menuitem" data-go="#/team">Team access<small>Who can see and score interviews</small></button>`:'')+
+    `<button type="button" role="menuitem" data-go="#/trash">Recently deleted${trash?' ('+trash+')':''}<small>Restore deleted interviews</small></button>`+
+    (cloud.user?`<button type="button" role="menuitem" data-act="signout">Sign out</button>`:'');
+  setSync(cloud.state);
+}
+
+/* ---------- Auth views ---------- */
+let loginMode='in';
+function viewLoading(){app.innerHTML=`<section class="page"><p class="sub">Loading interviews</p></section>`}
+function viewLogin(){
+  document.title='Sign in | Troopod KAM interviews';
+  const up=loginMode==='up';
+  app.innerHTML=`<section class="page"><div class="auth-card">
+    <h1>${up?'Create your account':'Sign in'}</h1>
+    <p class="sub">${up?'Only emails on the interview team can create an account. Ask Vinit to add yours first.':'Interviews save to the Troopod cloud as you type, so they are there on every device. Use your MUSTAINE login.'}</p>
+    <form id="lf" novalidate style="margin-top:24px">
+      <div class="field"><label for="l-email">Email</label><input class="input" id="l-email" type="email" autocomplete="username" inputmode="email" maxlength="120"></div>
+      <div class="field"><label for="l-pw">Password</label><input class="input" id="l-pw" type="password" autocomplete="${up?'new-password':'current-password'}" maxlength="72"></div>
+      ${up?'<div class="field"><label for="l-pw2">Repeat password</label><input class="input" id="l-pw2" type="password" autocomplete="new-password" maxlength="72"></div>':''}
+      <div class="err" id="l-err" role="alert"></div>
+      <button class="btn primary" type="submit" id="l-sub" style="width:100%;margin-top:8px">${up?'Create account and sign in':'Sign in'}</button>
+    </form>
+    <p class="sub" style="margin-top:20px">${up?'Already have an account?':'First time here?'} <button type="button" class="linkbtn" data-act="loginmode">${up?'Sign in':'Create your account'}</button></p>
+    <p class="sub">Forgot your password? Ask Vinit to reset it.</p>
+  </div></section>`;
+  $('#lf').addEventListener('submit',doLogin);
+  setTimeout(()=>$('#l-email').focus(),30);
+}
+async function doLogin(e){
+  e.preventDefault();
+  const email=$('#l-email').value.trim().toLowerCase(),pw=$('#l-pw').value,up=loginMode==='up';
+  const err=m=>{const el=$('#l-err');el.textContent=m;el.classList.add('on')};
+  $('#l-err').classList.remove('on');
+  if(!EMAIL_RE.test(email))return err('Enter a valid email.');
+  if(pw.length<6)return err('Password must be at least 6 characters.');
+  if(up&&pw!==$('#l-pw2').value)return err('The two passwords do not match.');
+  const btn=$('#l-sub');btn.disabled=true;btn.textContent=up?'Creating account':'Signing in';
+  try{
+    if(up){
+      const inv=await sb.rpc('kam_is_invited',{p_email:email});if(inv.error)throw inv.error;
+      if(!inv.data){err('This email is not on the interview team yet. Ask Vinit to add it under Team access.');return}
+      const su=await sb.auth.signUp({email,password:pw});
+      if(su.error){if(/already|registered|exists/i.test(su.error.message)){err('An account with this email already exists. Sign in instead.');return}throw su.error}
+    }
+    const r=await sb.auth.signInWithPassword({email,password:pw});
+    if(r.error)throw r.error;
+    await afterSignIn(r.data.user);
+  }catch(x){err(authMsg(x))}
+  finally{if(btn.isConnected){btn.disabled=false;btn.textContent=up?'Create account and sign in':'Sign in'}}
+}
+function authMsg(x){
+  const m=(x&&x.message)||'';
+  if(/invalid login/i.test(m))return'Email or password is wrong.';
+  if(/not confirmed/i.test(m))return'This account is not confirmed yet. Ask Vinit to confirm it.';
+  if(/fetch|network|load failed/i.test(m))return'No connection. Check your internet and try again.';
+  if(/rate|too many/i.test(m))return'Too many attempts. Wait a minute and try again.';
+  return m||'Something went wrong. Try again.';
+}
+async function afterSignIn(user){
+  cloud.user=user;cloud.email=(user.email||'').toLowerCase();cloud.mode='cloud';
+  let member=null,owner=false;
+  try{
+    const r=await sb.rpc('kam_member');if(r.error)throw r.error;member=!!r.data;
+    if(member){const o=await sb.rpc('kam_owner');owner=!o.error&&!!o.data}
+    ls.set(MEMBER_KEY,JSON.stringify({email:cloud.email,member,owner}));
+  }catch(e){
+    let c=null;try{c=JSON.parse(ls.get(MEMBER_KEY)||'null')}catch(_){}
+    if(c&&c.email===cloud.email){member=c.member;owner=c.owner}else member=true;
+    setSync('offline');
+  }
+  cloud.member=member;cloud.owner=owner;
+  if(member&&ls.get(SYNCED_BY)!==cloud.email){DB.interviews.forEach(i=>dirty.add(i.id));saveDirty()}
+  route();
+  if(member)await sync(true);
+}
+function viewNoAccess(){
+  document.title='No access | Troopod KAM interviews';
+  app.innerHTML=`<section class="page"><div class="auth-card"><h1>No access yet</h1><p class="sub">You are signed in as <b style="color:var(--text)">${esc(cloud.email)}</b>, but this account is not on the KAM interview team. Ask Vinit to add it under Team access, then sign in again.</p><button class="btn" type="button" data-act="signout" style="margin-top:20px">Sign out</button></div></section>`;
+}
+async function signOut(){
+  flushSave();
+  if(dirty.size&&!confirm(`${dirty.size} interview${dirty.size>1?'s have':' has'} changes that have not reached the cloud yet. They will stay on this device until you sign in again. Sign out anyway?`))return;
+  try{await sb.auth.signOut()}catch(e){}
+  if(!dirty.size){DB=emptyDB();ls.del(KEY);ls.del(PULL_KEY);ls.del(SYNCED_BY);ls.del(FORM_KEY)}
+  cloud.user=null;cloud.member=null;cloud.owner=false;cloud.email='';setSync('idle');
+  if(location.hash&&location.hash!=='#/')location.hash='#/';else route();
+}
 
 /* ---------- List view ---------- */
 const LS={q:'',status:'all',sort:'recent'};
 function viewList(){
   document.title='Candidates | Troopod KAM interviews';
-  const all=DB.interviews,drafts=all.filter(i=>i.status==='draft').length;
+  const all=live(),drafts=all.filter(i=>i.status==='draft').length;
   const summary=all.length?`${all.length} interview${all.length>1?'s':''}, ${drafts} in draft`:'No interviews yet';
   app.innerHTML=`<section class="page">
-    ${storageBanner()}
+    ${banners()}
     <div class="page-head">
       <div><h1>Candidates</h1><p class="sub">${summary}</p></div>
       <a class="btn primary" href="#/new">New interview</a>
@@ -601,16 +836,23 @@ function viewList(){
   $$('[data-status]').forEach(b=>b.addEventListener('click',()=>{LS.status=b.dataset.status;$$('[data-status]').forEach(x=>x.setAttribute('aria-pressed',x===b));renderRows()}));
   $('#sort').addEventListener('change',e=>{LS.sort=e.target.value;renderRows()});
 }
-function emptyState(){return`<div class="empty"><h2>No interviews yet</h2><p>Start one when the candidate joins the call. Every score saves as you go, so you can stop halfway and come back.</p><div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap"><a class="btn primary" href="#/new">New interview</a><button class="btn" type="button" data-act="import">Restore a backup</button></div></div>`}
-function dataMenu(){return`<div class="menu" id="dmenu"><button class="btn" type="button" data-act="menu" aria-haspopup="true" aria-expanded="false">Data</button>
+function emptyState(){
+  const trash=DB.interviews.filter(i=>i.deleted).length;
+  return`<div class="empty"><h2>No interviews yet</h2><p>Start one when the candidate joins the call. Every score and note saves to the cloud as you go, so you can stop halfway and carry on from any device.</p><div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap"><a class="btn primary" href="#/new">New interview</a>${trash?`<a class="btn" href="#/trash">Recently deleted (${trash})</a>`:''}<button class="btn" type="button" data-act="import">Restore a backup</button></div></div>`;
+}
+function dataMenu(){
+  const trash=DB.interviews.filter(i=>i.deleted).length;
+  return`<div class="menu"><button class="btn" type="button" data-act="menu" aria-haspopup="true" aria-expanded="false">Data</button>
   <div class="menu-list" role="menu">
     <button type="button" role="menuitem" data-act="csv">Export CSV<small>Every interview, every score, opens in Excel</small></button>
-    <button type="button" role="menuitem" data-act="backup">Back up data<small>One file to restore on any browser</small></button>
+    <button type="button" role="menuitem" data-act="backup">Back up data<small>One file with everything, as an extra copy</small></button>
     <button type="button" role="menuitem" data-act="import">Restore a backup<small>Merges with what is here, newer edits win</small></button>
-  </div></div>`}
+    <button type="button" role="menuitem" data-go="#/trash">Recently deleted${trash?' ('+trash+')':''}<small>Nothing is erased; restore any time</small></button>
+  </div></div>`;
+}
 function filtered(){
   const q=LS.q.trim().toLowerCase();
-  let list=DB.interviews.filter(i=>(LS.status==='all'||i.status===LS.status)&&(!q||(i.name+' '+i.email+' '+i.interviewer).toLowerCase().includes(q)));
+  let list=live().filter(i=>(LS.status==='all'||i.status===LS.status)&&(!q||(i.name+' '+i.email+' '+i.interviewer).toLowerCase().includes(q)));
   const sc=new Map(list.map(i=>[i.id,calc(i).total]));
   list.sort((a,b)=>LS.sort==='score'?((sc.get(b.id)??-1)-(sc.get(a.id)??-1)):LS.sort==='date'?(b.date.localeCompare(a.date)||b.updatedAt-a.updatedAt):LS.sort==='name'?a.name.localeCompare(b.name):b.updatedAt-a.updatedAt);
   return list;
@@ -625,7 +867,7 @@ function renderRows(){
       <div class="meta-c"><span class="meta">${esc(i.interviewer)||'No interviewer'}</span><span class="meta">${fmtDate(i.date)}${i.round>1?', round '+i.round:''}</span></div>
       <div class="prog"><div class="track"><i style="width:${c.answered/QN.length*100}%"></i></div><span class="num">${c.answered}/${QN.length}</span></div>
       <div class="score-cell num">${fmtS(c.total)}</div>
-      <div class="v"><span class="pill tone-${c.verdict.tone}">${esc(c.verdict.label)}</span><span class="status">${i.status==='completed'?'Completed':c.complete?'Ready to finish':'Draft'}</span></div>
+      <div class="v"><span class="pill tone-${c.verdict.tone}">${esc(c.verdict.label)}</span><span class="status">${i.status==='completed'?'Completed':c.complete?'Ready to finish':'Draft'}${dirty.has(i.id)?', saving':''}</span></div>
       <div class="acts no-print"><a class="btn ghost sm" href="#/r/${encodeURIComponent(i.id)}">Report</a><button class="btn danger sm" type="button" data-del="${esc(i.id)}" aria-label="Delete interview with ${esc(i.name)}">Delete</button></div>
     </div>`}).join('');
 }
@@ -636,7 +878,7 @@ function board(all){
   let s=`<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Candidates ranked by weighted score">`;
   for(let t=0;t<=4;t++)s+=`<line class="grid" x1="${x(t)}" x2="${x(t)}" y1="${top-6}" y2="${H-4}"/><text class="tick" x="${x(t)}" y="${top-12}" text-anchor="middle">${t}</text>`;
   rows.forEach((r,k)=>{
-    const y=top+k*rh,nm=r.i.name.length>24?r.i.name.slice(0,23)+'\u2026':r.i.name,tone=r.c.verdict.tone==='muted'?'muted':r.c.verdict.tone;
+    const y=top+k*rh,nm=r.i.name.length>24?r.i.name.slice(0,23)+'\u2026':r.i.name,tone=r.c.verdict.tone;
     s+=`<a href="#/r/${encodeURIComponent(r.i.id)}"><text class="lab" x="0" y="${y+15}">${esc(nm)}</text><text class="sublab" x="0" y="${y+28}">${r.i.status==='draft'?(r.c.complete?'Ready to finish':'Draft, '+r.c.answered+' of 30'):esc(r.c.verdict.label)}</text>
       <rect class="b-${tone}" x="${left}" y="${y+6}" width="${Math.max(2,x(r.c.total)-left)}" height="16" rx="3"/>
       <text class="val" x="${x(r.c.total)+8}" y="${y+19}">${r.c.total.toFixed(2)}</text></a>`;
@@ -646,33 +888,40 @@ function board(all){
   return`<div class="board"><h2>How candidates compare</h2><p class="cap">${esc(lead.i.name)} leads at ${lead.c.total.toFixed(2)}. Bar colour follows the verdict; drafts are scored on the answers so far.</p><div class="scroll">${s}</div><div class="legend"><span>3.0 hire bar</span><span class="f">2.5 pillar floor</span></div></div>`;
 }
 
-/* ---------- Form view ---------- */
+/* ---------- Form view (autosaves as you type) ---------- */
 let dupAck=null;
+const FIELDS=[['name','#f-name'],['email','#f-email'],['interviewer','#f-int'],['date','#f-date'],['role','#f-role'],['tenure','#f-ten']];
+function readFormDraft(ctx){try{const d=JSON.parse(ls.get(FORM_KEY)||'null');if(d&&d.ctx===ctx&&Date.now()-d.at<30*864e5&&Object.values(d.v).some(x=>String(x||'').trim()))return d.v}catch(e){}return null}
+function saveFormDraft(ctx){const v={};FIELDS.forEach(([k,s])=>{const el=$(s);if(el)v[k]=el.value});ls.set(FORM_KEY,JSON.stringify({ctx,at:Date.now(),v}))}
 function viewForm(editId){
   const iv=editId?getIv(editId):null;
-  if(editId&&!iv)return notFound();
-  dupAck=null;
+  if(editId&&(!iv||iv.deleted))return notFound(iv);
+  dupAck=null;const ctx=iv?'edit:'+iv.id:'new';
   document.title=(iv?'Edit details':'New interview')+' | Troopod KAM interviews';
-  const d=iv||{name:'',email:'',interviewer:DB.lastInterviewer||'',role:'Key Account Manager',date:todayISO(),tenure:null};
+  const base=iv?{name:iv.name,email:iv.email,interviewer:iv.interviewer,role:iv.role,date:iv.date,tenure:iv.tenure==null?'':iv.tenure}
+    :{name:'',email:'',interviewer:DB.lastInterviewer||'',role:'Key Account Manager',date:todayISO(),tenure:''};
+  const dr=readFormDraft(ctx);const d=dr?Object.assign({},base,dr):base;
+  const back=iv?'#/i/'+encodeURIComponent(iv.id):'#/';
   app.innerHTML=`<section class="page">
-    ${storageBanner()}
-    <a class="crumb" href="${iv?'#/i/'+encodeURIComponent(iv.id):'#/'}">${iv?'Back to interview':'Candidates'}</a>
-    <div class="page-head" style="margin-top:10px"><div><h1>${iv?'Edit details':'New interview'}</h1><p class="sub">${iv?'Scores and notes stay as they are.':'Fill this in before the call starts. It takes 30 seconds.'}</p></div></div>
+    ${banners()}
+    <a class="crumb" href="${back}">${iv?'Back to interview':'Candidates'}</a>
+    <div class="page-head" style="margin-top:10px"><div><h1>${iv?'Edit details':'New interview'}</h1><p class="sub">${iv?'Scores and notes stay as they are.':'Fill this in before the call starts. What you type is kept even if you leave this page.'}</p></div></div>
+    ${dr?`<div class="banner purple">Restored what you typed earlier. <button type="button" class="linkbtn" data-act="clearform">Start over</button></div>`:''}
     <form class="form" id="f" novalidate>
-      <div class="field"><label for="f-name">Candidate name <span class="req">*</span></label><input class="input" id="f-name" name="name" autocomplete="off" maxlength="80" value="${esc(d.name)}"><div class="err" id="e-name">Enter the candidate's name.</div></div>
-      <div class="field"><label for="f-email">Candidate email <span class="req">*</span></label><input class="input" id="f-email" name="email" type="email" inputmode="email" autocomplete="off" maxlength="120" value="${esc(d.email)}"><div class="err" id="e-email">Enter a valid email, like name@company.com.</div><div id="dup" class="banner purple" style="display:none;margin:10px 0 0"></div></div>
-      <div class="field"><label for="f-int">Who is taking the interview <span class="req">*</span></label><input class="input" id="f-int" name="interviewer" list="ints" autocomplete="off" maxlength="60" value="${esc(d.interviewer)}"><datalist id="ints">${DB.interviewers.map(n=>`<option value="${esc(n)}">`).join('')}</datalist><div class="err" id="e-int">Enter the interviewer's name.</div><span class="hint">Remembered for next time.</span></div>
+      <div class="field"><label for="f-name">Candidate name <span class="req">*</span></label><input class="input" id="f-name" autocomplete="off" maxlength="80" value="${esc(d.name)}"><div class="err" id="e-name">Enter the candidate's name.</div></div>
+      <div class="field"><label for="f-email">Candidate email <span class="req">*</span></label><input class="input" id="f-email" type="email" inputmode="email" autocomplete="off" maxlength="120" value="${esc(d.email)}"><div class="err" id="e-email">Enter a valid email, like name@company.com.</div><div id="dup" class="banner purple" style="display:none;margin:10px 0 0"></div></div>
+      <div class="field"><label for="f-int">Who is taking the interview <span class="req">*</span></label><input class="input" id="f-int" list="ints" autocomplete="off" maxlength="60" value="${esc(d.interviewer)}"><datalist id="ints">${DB.interviewers.map(n=>`<option value="${esc(n)}">`).join('')}</datalist><div class="err" id="e-int">Enter the interviewer's name.</div><span class="hint">Remembered for next time.</span></div>
       <div class="grid2">
-        <div class="field"><label for="f-date">Interview date</label><input class="input" id="f-date" name="date" type="date" value="${esc(d.date)}"><div class="err" id="e-date">Pick a valid date.</div></div>
-        <div class="field"><label for="f-role">Role</label><input class="input" id="f-role" name="role" maxlength="60" value="${esc(d.role)}"></div>
+        <div class="field"><label for="f-date">Interview date</label><input class="input" id="f-date" type="date" value="${esc(d.date)}"><div class="err" id="e-date">Pick a valid date.</div></div>
+        <div class="field"><label for="f-role">Role</label><input class="input" id="f-role" maxlength="60" value="${esc(d.role)}"></div>
       </div>
-      <div class="field"><label for="f-ten">Average months per past role</label><input class="input" id="f-ten" name="tenure" type="number" inputmode="numeric" min="0" max="480" step="1" placeholder="From their CV, e.g. 20" value="${d.tenure==null?'':d.tenure}"><div class="err" id="e-ten">Enter a whole number of months between 0 and 480.</div><span class="hint">Optional. Under 18 months flags Q23 and Q25 for deeper probing.</span></div>
-      <div class="form-acts"><button class="btn primary" type="submit" id="f-submit">${iv?'Save details':'Start interview'}</button><a class="btn ghost" href="${iv?'#/i/'+encodeURIComponent(iv.id):'#/'}">Cancel</a></div>
+      <div class="field"><label for="f-ten">Average months per past role</label><input class="input" id="f-ten" type="number" inputmode="numeric" min="0" max="480" step="1" placeholder="From their CV, e.g. 20" value="${esc(d.tenure)}"><div class="err" id="e-ten">Enter a whole number of months between 0 and 480.</div><span class="hint">Optional. Under 18 months flags Q23 and Q25 for deeper probing.</span></div>
+      <div class="form-acts"><button class="btn primary" type="submit" id="f-submit">${iv?'Save details':'Start interview'}</button><button class="btn ghost" type="button" data-act="cancelform" data-back="${back}">Cancel</button></div>
     </form></section>`;
   const f=$('#f');
-  $('#f-email').addEventListener('input',()=>{dupAck=null;$('#dup').style.display='none';$('#f-submit').textContent=iv?'Save details':'Start interview'});
+  f.addEventListener('input',e=>{saveFormDraft(ctx);if(e.target.id==='f-email'){dupAck=null;$('#dup').style.display='none';$('#f-submit').textContent=iv?'Save details':'Start interview'}});
   f.addEventListener('submit',e=>{e.preventDefault();submitForm(iv)});
-  setTimeout(()=>$(iv?'#f-name':(d.name?'#f-email':'#f-name')).focus(),30);
+  setTimeout(()=>{const el=$(iv?'#f-name':(d.name?'#f-email':'#f-name'));el&&el.focus()},30);
 }
 function submitForm(iv){
   const v=id=>$(id).value;
@@ -684,34 +933,34 @@ function submitForm(iv){
   for(const k in errs){$(map[k]).setAttribute('aria-invalid',errs[k]);$('#e-'+k).classList.toggle('on',errs[k]);if(errs[k]&&!first)first=map[k]}
   if(first){$(first).focus();return}
   const tenure=tRaw===''?null:+tRaw;
-  const prior=DB.interviews.filter(i=>i.email===email&&(!iv||i.id!==iv.id));
+  const prior=live().filter(i=>i.email===email&&(!iv||i.id!==iv.id));
   if(prior.length&&dupAck!==email){
     const draft=prior.find(i=>i.status==='draft');
-    const latest=prior.sort((a,b)=>b.date.localeCompare(a.date))[0];
+    const latest=prior.slice().sort((a,b)=>b.date.localeCompare(a.date))[0];
     const box=$('#dup');box.style.display='block';
     box.innerHTML=iv?`Another interview already uses this email (${esc(latest.name)}, ${fmtDate(latest.date)}). Save anyway if this is the same person.`
       :`${esc(latest.name)} already has ${prior.length} interview${prior.length>1?'s':''}, the latest on ${fmtDate(latest.date)}. Continuing starts round ${prior.length+1}.${draft?` <a href="#/i/${encodeURIComponent(draft.id)}" style="color:#fff">Open the unfinished draft instead</a>.`:''}`;
     dupAck=email;$('#f-submit').textContent=iv?'Save anyway':'Start round '+(prior.length+1);return;
   }
-  rememberInterviewer(interviewer);
+  rememberInterviewer(interviewer);ls.del(FORM_KEY);
   if(iv){Object.assign(iv,{name,email,interviewer,date,role,tenure});touch(iv);saveDB();toast('Details saved.');location.hash='#/i/'+encodeURIComponent(iv.id);return}
-  const n={id:uid(),name,email,interviewer,role,date,tenure,round:prior.length+1,status:'draft',scores:{},notes:{},summary:'',rec:'',createdAt:Date.now(),updatedAt:Date.now(),completedAt:null};
-  DB.interviews.push(n);saveDB();
+  const n={id:uid(),name,email,interviewer,role,date,tenure,round:prior.length+1,status:'draft',scores:{},notes:{},summary:'',rec:'',createdAt:Date.now(),updatedAt:Date.now(),completedAt:null,createdBy:cloud.email||'',deleted:false,deletedAt:null};
+  DB.interviews.push(n);touch(n);saveDB();push();
   location.hash='#/i/'+encodeURIComponent(n.id);
 }
 
 /* ---------- Interview view ---------- */
 function viewInterview(id){
-  const iv=getIv(id);if(!iv)return notFound();
+  const iv=getIv(id);if(!iv||iv.deleted)return notFound(iv);
   document.title=iv.name+' | Troopod KAM interviews';
-  const sections=PILLARS.map((P,idx)=>{
+  const sections=PILLARS.map(P=>{
     const qs=QS.filter(q=>q.p===P.k);
-    return`<section class="sec" id="sec-${P.k}" data-p="${P.k}">
+    return`<section class="sec" id="sec-${P.k}">
       <div class="sec-head"><div><h2>${esc(P.name)}</h2><p>${esc(P.why)} About ${P.mins} min, ${P.w}% of the score.</p></div><span class="avg num" data-avg="${P.k}"></span></div>
       ${qs.map(q=>qcard(iv,q)).join('')}
     </section>`}).join('');
   const lowTen=iv.tenure!=null&&iv.tenure<18;
-  app.innerHTML=`${storageOK?'':'<div class="iv-head">'+storageBanner()+'</div>'}
+  app.innerHTML=`${banners()?'<div class="iv-head">'+banners()+'</div>':''}
   <div class="iv-head">
     <a class="crumb no-print" href="#/">Candidates</a>
     <div class="iv-title">
@@ -719,7 +968,7 @@ function viewInterview(id){
         <div class="iv-meta"><span>${esc(iv.email)}</span><span>Interviewer: ${esc(iv.interviewer)}</span><span>${fmtDate(iv.date)}</span><span>${esc(iv.role)}${iv.round>1?', round '+iv.round:''}</span><span id="statuslbl">${iv.status==='completed'?'Completed':'Draft'}</span></div>
       </div>
       <div class="iv-acts no-print">
-        <span class="savestate" id="savestate" aria-live="polite"></span>
+        <span class="syncstate" aria-live="polite"></span>
         <a class="btn ghost sm" href="#/edit/${encodeURIComponent(iv.id)}">Edit details</a>
         <a class="btn sm" href="#/r/${encodeURIComponent(iv.id)}">Report</a>
       </div>
@@ -745,10 +994,7 @@ function viewInterview(id){
   </div>
   <div class="scrim" id="scrim"></div>
   <div class="mbar no-print" id="mbar"></div>`;
-  setSave(lastSaved&&saveState!=='idle'?saveState:'idle');
-  if(lastSaved&&storageOK)setSave('saved');if(!storageOK)setSave('off');
-  refresh(iv);
-  observeSections();
+  refresh(iv);setSync(cloud.state);observeSections();
 }
 function qcard(iv,q){
   const s=iv.scores[q.n]||0;
@@ -765,6 +1011,7 @@ function qcard(iv,q){
     <details class="guide"><summary>Answer guide</summary><div class="guide-grid"><div class="g"><b>Strong answer</b>${esc(q.good)}</div><div class="r"><b>Red flag</b>${esc(q.bad)}</div></div></details>
   </article>`;
 }
+function gateList(c){return`<ul class="gates">${c.gates.map(g=>`<li class="${g.state}"><span>${esc(g.label)}${g.state==='fail'&&g.detail?': '+esc(g.detail):''}</span><b>${g.state==='pass'?'Pass':g.state==='fail'?'Fail':'Open'}</b></li>`).join('')}</ul>`}
 function refresh(iv){
   const c=calc(iv);
   for(const P of PILLARS){
@@ -778,13 +1025,15 @@ function refresh(iv){
     <div class="ps"><span class="big num">${fmtS(c.total)}</span><span class="of">out of 4</span></div>
     <div class="pstate">${c.complete?'Final score':c.answered?`Provisional, ${c.answered} of ${QN.length} scored`:'Nothing scored yet'}</div>
     <div class="verdict tone-${c.verdict.tone}" role="status">${esc(c.verdict.label)}<small>${esc(c.verdict.why)}</small></div>
-    <ul class="gates">${c.gates.map(g=>`<li class="${g.state}"><span>${esc(g.label)}${g.state==='fail'&&g.detail?': '+esc(g.detail):''}</span><b>${g.state==='pass'?'Pass':g.state==='fail'?'Fail':'Open'}</b></li>`).join('')}</ul>
+    ${gateList(c)}
     ${c.pauses.length?`<div class="pauses"><p>Automatic pause</p><ul>${c.pauses.map(p=>`<li>${esc(p)}</li>`).join('')}</ul></div>`:''}
-    <ul class="plist">${PILLARS.map(P=>{const p=c.pil[P.k],t=toneOf(p.avg);return`<li><button type="button" data-jump="${P.k}"><div class="pl"><span>${esc(P.short)} <span class="num" style="color:var(--faint)">${P.w}%</span></span><span class="num">${p.avg==null?'\u2013':p.avg.toFixed(2)}</span></div><div class="mini"><i style="width:${p.avg==null?0:p.avg/4*100}%;background:var(--${t==='muted'?'line-2':t})"></i><b style="left:${2.5/4*100}%"></b></div></button></li>`}).join('')}</ul>
+    <ul class="plist">${PILLARS.map(P=>{const p=c.pil[P.k],t=toneOf(p.avg);return`<li><button type="button" data-jump="${P.k}"><div class="pl"><span>${esc(P.short)} <span class="num" style="color:var(--faint)">${P.w}%</span></span><span class="num">${p.avg==null?'\u2013':p.avg.toFixed(2)}</span></div><div class="mini"><i style="width:${p.avg==null?0:p.avg/4*100}%;background:var(--${t==='muted'?'line-2':t})"></i><b style="left:62.5%"></b></div></button></li>`}).join('')}</ul>
     ${iv.status==='completed'?`<a class="btn primary" href="#/r/${encodeURIComponent(iv.id)}">View report</a><p class="left">Completed ${iv.completedAt?fmtDate(new Date(iv.completedAt).toISOString()):''}. Changes still save.</p>`
-      :`<button class="btn primary" type="button" data-act="finish">${left?'Finish interview':'Finish and see report'}</button><p class="left">${left?`${left} question${left>1?'s':''} left. You can leave and come back; it is saved as a draft.`:'All 30 scored.'}</p>`}`;
+      :`<button class="btn primary" type="button" data-act="finish">${left?'Finish interview':'Finish and see report'}</button><p class="left">${left?`${left} question${left>1?'s':''} left. Leave any time; it is saved as a draft.`:'All 30 scored.'}</p>`}
+    <p class="left syncstate"></p>`;
   const mb=$('#mbar');
   if(mb)mb.innerHTML=`<button type="button" class="open-p" data-act="sheet" aria-controls="panel" aria-expanded="false"><span class="big num">${fmtS(c.total)}</span><span><span class="mv tone-${c.verdict.tone}">${esc(c.verdict.label)}</span><span class="mp num">${c.answered} of ${QN.length} scored. Tap for detail</span></span></button>${iv.status==='completed'?`<a class="btn primary sm" href="#/r/${encodeURIComponent(iv.id)}">Report</a>`:`<button class="btn primary sm" type="button" data-act="finish">Finish</button>`}`;
+  setSync(cloud.state);
 }
 function setScore(iv,n,v){
   const card=$('#q-'+n);
@@ -800,7 +1049,7 @@ function finish(iv){
     toast(`${QN.length-c.answered} still unscored. Jumping to Q${first.n}.`);
     closeSheet();jumpTo('q-'+first.n,true);return;
   }
-  iv.status='completed';iv.completedAt=Date.now();touch(iv);saveDB();
+  iv.status='completed';iv.completedAt=Date.now();touch(iv);saveDB();push();
   toast('Interview completed.');location.hash='#/r/'+encodeURIComponent(iv.id);
 }
 function jumpTo(id,flash){
@@ -814,8 +1063,8 @@ function observeSections(){
   io=new IntersectionObserver(es=>{es.forEach(e=>{if(e.isIntersecting){const k=e.target.id.replace('sec-','');$$('.pnav [data-jump]').forEach(b=>b.classList.toggle('on',b.dataset.jump===k))}})},{rootMargin:'-30% 0px -60% 0px'});
   $$('.sec').forEach(s=>io.observe(s));
 }
-function openSheet(){$('#panel')?.classList.add('open');$('#scrim')?.classList.add('open');$('[data-act="sheet"]')?.setAttribute('aria-expanded','true')}
-function closeSheet(){$('#panel')?.classList.remove('open');$('#scrim')?.classList.remove('open');$('[data-act="sheet"]')?.setAttribute('aria-expanded','false')}
+function openSheet(){const p=$('#panel');if(!p)return;p.classList.add('open');$('#scrim')&&$('#scrim').classList.add('open')}
+function closeSheet(){const p=$('#panel');if(p)p.classList.remove('open');const s=$('#scrim');if(s)s.classList.remove('open')}
 
 /* ---------- Report view ---------- */
 function pillarChart(c){
@@ -831,18 +1080,20 @@ function pillarChart(c){
 }
 function qItem(iv,q){const s=iv.scores[q.n]||0;return`<li><div class="q"><span class="sc s${s}">${s||'\u2013'}</span><span><b>Q${q.n}</b> ${esc(q.q)}</span></div>${iv.notes[q.n]?`<div class="nt">${esc(iv.notes[q.n])}</div>`:''}</li>`}
 function viewReport(id){
-  const iv=getIv(id);if(!iv)return notFound();
+  const iv=getIv(id);if(!iv||iv.deleted)return notFound(iv);
   document.title='Report: '+iv.name+' | Troopod KAM interviews';
   const c=calc(iv);
   const strong=QS.filter(q=>iv.scores[q.n]===4),weak=QS.filter(q=>iv.scores[q.n]&&iv.scores[q.n]<=2).sort((a,b)=>iv.scores[a.n]-iv.scores[b.n]),open=QS.filter(q=>!iv.scores[q.n]);
   const best=PILLARS.filter(P=>c.pil[P.k].avg!=null).sort((a,b)=>c.pil[b.k].avg-c.pil[a.k].avg);
-  const lead=!c.answered?'Nothing has been scored yet.':`${c.complete?'Final':'Provisional'} score ${c.total.toFixed(2)} out of 4. Strongest pillar: ${best[0].short} (${c.pil[best[0].k].avg.toFixed(2)}).${best.length>1&&c.pil[best[best.length-1].k].avg<c.pil[best[0].k].avg?` Weakest: ${best[best.length-1].short} (${c.pil[best[best.length-1].k].avg.toFixed(2)}).`:''}`;
+  const lo=best[best.length-1];
+  const lead=!c.answered?'Nothing has been scored yet.':`${c.complete?'Final':'Provisional'} score ${c.total.toFixed(2)} out of 4. Strongest pillar: ${best[0].short} (${c.pil[best[0].k].avg.toFixed(2)}).${best.length>1&&c.pil[lo.k].avg<c.pil[best[0].k].avg?` Weakest: ${lo.short} (${c.pil[lo.k].avg.toFixed(2)}).`:''}`;
   const mismatch=iv.rec&&c.complete&&((iv.rec==='hire'&&c.verdict.key!=='hire')||(iv.rec==='no'&&c.verdict.key==='hire'));
   app.innerHTML=`<section class="page">
+    ${banners()}
     <a class="crumb no-print" href="#/">Candidates</a>
     <div class="page-head" style="margin-top:10px">
       <div><h1>${esc(iv.name)}</h1><p class="sub">${esc(iv.email)}. ${esc(iv.role)}${iv.round>1?', round '+iv.round:''}. Interviewed by ${esc(iv.interviewer)} on ${fmtDate(iv.date)}. ${iv.status==='completed'?'Completed':'Draft'}.</p></div>
-      <div class="iv-acts no-print"><a class="btn" href="#/i/${encodeURIComponent(iv.id)}">${iv.status==='completed'?'Edit scores':'Continue interview'}</a><button class="btn" type="button" data-act="csv1">Export CSV</button><button class="btn primary" type="button" data-act="print">Download PDF</button></div>
+      <div class="iv-acts no-print"><a class="btn" href="#/i/${encodeURIComponent(iv.id)}">${iv.status==='completed'?'Edit scores':'Continue interview'}</a><a class="btn" href="#/h/${encodeURIComponent(iv.id)}">Version history</a><button class="btn" type="button" data-act="csv1">Export CSV</button><button class="btn primary" type="button" data-act="print">Download PDF</button></div>
     </div>
     ${!c.complete&&c.answered?`<div class="banner">This is a draft. ${QN.length-c.answered} questions are unscored, so the verdict may change.</div>`:''}
     <div class="card"><div class="headline"><span class="big num">${fmtS(c.total)}</span><div class="verdict tone-${c.verdict.tone}">${esc(c.verdict.label)}<small>${esc(c.verdict.why)}</small></div></div><p class="sub" style="margin-top:16px">${esc(lead)}</p>
@@ -852,7 +1103,7 @@ function viewReport(id){
     <div class="rep-grid">
       <div class="card"><h2>Pillar scores</h2><p class="cap">Average of the 1 to 4 scores in each pillar.</p><div class="scroll">${pillarChart(c)}</div><div class="legend"><span>3.0 hire bar</span><span class="f">2.5 pillar floor</span></div></div>
       <div class="card"><h2>Hire gates</h2><p class="cap">All three must pass, with no automatic pause.</p>
-        <ul class="gates" style="margin-top:0">${c.gates.map(g=>`<li class="${g.state}"><span>${esc(g.label)}${g.state==='fail'&&g.detail?': '+esc(g.detail):''}</span><b>${g.state==='pass'?'Pass':g.state==='fail'?'Fail':'Open'}</b></li>`).join('')}</ul>
+        ${gateList(c).replace('class="gates"','class="gates" style="margin-top:0"')}
         ${c.pauses.length?`<div class="pauses"><p>Automatic pause</p><ul>${c.pauses.map(p=>`<li>${esc(p)}</li>`).join('')}</ul><p style="font-weight:400;margin:8px 0 0">Ask their last manager: would you hire them again, and why did they leave?</p></div>`:''}
         ${iv.tenure!=null?`<p class="sub" style="margin-top:14px">Average tenure ${iv.tenure} months${iv.tenure<18?', under the 18-month line':''}.</p>`:''}
       </div>
@@ -869,11 +1120,80 @@ function viewReport(id){
   </section>`;
 }
 
+/* ---------- Version history ---------- */
+let histRows=new Map();
+async function viewHistory(id){
+  const iv=getIv(id);if(!iv||iv.deleted)return notFound(iv);
+  document.title='History: '+iv.name+' | Troopod KAM interviews';
+  app.innerHTML=`<section class="page">${banners()}
+    <a class="crumb" href="#/r/${encodeURIComponent(iv.id)}">Back to report</a>
+    <div class="page-head" style="margin-top:10px"><div><h1>Version history</h1><p class="sub">${esc(iv.name)}. A restore point is kept every 2 minutes of editing, and on every delete. Restoring a version keeps all the others.</p></div></div>
+    <div class="card" id="hist"><p class="sub">Loading versions</p></div></section>`;
+  const box=$('#hist');
+  if(!cloudReady()){box.innerHTML='<p class="sub">Version history needs the cloud connection. Sign in with internet on to see it.</p>';return}
+  if(dirty.has(id))await push();
+  const{data,error}=await sb.from('kam_interview_history').select('hid,data,deleted,changed_at,changed_by').eq('interview_id',id).order('hid',{ascending:false}).limit(300);
+  if(currentView().id!==id||currentView().v!=='h')return;
+  if(error){handleCloudError(error);box.innerHTML='<p class="sub">Could not load versions right now. Check your connection and reload.</p>';return}
+  if(!data.length){box.innerHTML='<p class="sub">No versions in the cloud yet. They appear once this interview has synced.</p>';return}
+  histRows=new Map(data.map(r=>[String(r.hid),r]));
+  box.innerHTML=`<ul class="hlist">${data.map((r,k)=>{
+    const s=cleanIv(Object.assign({},r.data,{id}));const c=s?calc(s):null;
+    return`<li><div><b>${fmtDT(r.changed_at)}</b>${k===0?' <span class="pill tone-purple">Latest</span>':''}${r.deleted?' <span class="pill tone-red">Deleted</span>':''}<span class="meta">${esc(r.changed_by||'Unknown')}. ${c?`${c.answered} of 30 scored, score ${fmtS(c.total)}`:'Unreadable version'}</span></div>${k>0&&s?`<button class="btn sm" type="button" data-restore="${r.hid}">Restore this version</button>`:''}</li>`}).join('')}</ul>`;
+}
+
+/* ---------- Recently deleted ---------- */
+function viewTrash(){
+  document.title='Recently deleted | Troopod KAM interviews';
+  const list=DB.interviews.filter(i=>i.deleted).sort((a,b)=>(b.deletedAt||0)-(a.deletedAt||0));
+  app.innerHTML=`<section class="page">${banners()}
+    <a class="crumb" href="#/">Candidates</a>
+    <div class="page-head" style="margin-top:10px"><div><h1>Recently deleted</h1><p class="sub">Deleted interviews are never erased. Restore one and it goes back to the candidate list with every score and note.</p></div></div>
+    ${list.length?`<div class="card"><ul class="hlist">${list.map(i=>{const c=calc(i);return`<li><div><b>${esc(i.name)}</b><span class="meta">${esc(i.email)}. Interviewed ${fmtDate(i.date)} by ${esc(i.interviewer)}. ${c.answered} of 30 scored. Deleted ${i.deletedAt?fmtDT(i.deletedAt):''}</span></div><button class="btn sm" type="button" data-undel="${esc(i.id)}">Restore</button></li>`}).join('')}</ul></div>`
+      :'<div class="empty"><h2>Nothing deleted</h2><p>Interviews you delete land here, so you can bring them back.</p><a class="btn" href="#/">Back to candidates</a></div>'}
+  </section>`;
+}
+
+/* ---------- Team access ---------- */
+async function viewTeam(){
+  if(!cloud.owner){toast('Only owners can manage team access.');location.replace('#/');return}
+  document.title='Team access | Troopod KAM interviews';
+  app.innerHTML=`<section class="page">${banners()}
+    <a class="crumb" href="#/">Candidates</a>
+    <div class="page-head" style="margin-top:10px"><div><h1>Team access</h1><p class="sub">Only these emails can see candidates and score interviews. People you add sign in with their MUSTAINE login, or create an account on the sign-in page using this email.</p></div></div>
+    <form class="card form" id="tf" novalidate style="max-width:none">
+      <div class="teamgrid">
+        <div class="field" style="margin:0"><label for="t-email">Email</label><input class="input" id="t-email" type="email" inputmode="email" maxlength="120" autocomplete="off"></div>
+        <div class="field" style="margin:0"><label for="t-role">Role</label><select class="input" id="t-role"><option value="member">Interviewer</option><option value="owner">Owner (can manage team)</option></select></div>
+        <button class="btn primary" type="submit" style="min-height:46px">Add to team</button>
+      </div>
+      <div class="err" id="t-err" role="alert"></div>
+    </form>
+    <div class="card" id="tlist" style="margin-top:20px"><p class="sub">Loading team</p></div></section>`;
+  $('#tf').addEventListener('submit',async e=>{
+    e.preventDefault();
+    const email=$('#t-email').value.trim().toLowerCase(),role=$('#t-role').value,er=$('#t-err');er.classList.remove('on');
+    if(!EMAIL_RE.test(email)){er.textContent='Enter a valid email.';er.classList.add('on');return}
+    const{error}=await sb.from('kam_team').insert({email,role,added_by:cloud.email});
+    if(error){er.textContent=error.code==='23505'?'This email is already on the team.':/fetch|network/i.test(error.message)?'No connection. Try again.':error.message;er.classList.add('on');return}
+    $('#t-email').value='';toast(`Added ${email}.`);loadTeam();
+  });
+  loadTeam();
+}
+async function loadTeam(){
+  const box=$('#tlist');if(!box)return;
+  const{data,error}=await sb.from('kam_team').select('email,role,added_at,added_by').order('added_at',{ascending:true});
+  if(!$('#tlist'))return;
+  if(error){box.innerHTML='<p class="sub">Could not load the team. Check your connection and reload.</p>';return}
+  box.innerHTML=`<ul class="hlist">${data.map(m=>`<li><div><b>${esc(m.email)}</b>${m.email===cloud.email?' <span class="pill tone-purple">You</span>':''}<span class="meta">${m.role==='owner'?'Owner':'Interviewer'}. Added ${fmtDate(m.added_at)}${m.added_by&&m.added_by!=='setup'?' by '+esc(m.added_by):''}</span></div>${m.email!==cloud.email?`<button class="btn danger sm" type="button" data-unteam="${esc(m.email)}">Remove</button>`:''}</li>`).join('')}</ul>`;
+}
+
 /* ---------- Export / import ---------- */
 function csvCell(v){let s=v==null?'':String(v);if(/^[=+\-@\t\r]/.test(s))s="'"+s;return/[",\n\r]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s}
 function toCSV(list){
-  const head=['Candidate','Email','Interviewer','Role','Date','Round','Status','Scored','Weighted score','Verdict','Interviewer call',...PILLARS.map(P=>P.short+' avg'),...[...QN].sort((a,b)=>a-b).map(n=>'Q'+n),'Summary'];
-  const rows=list.map(i=>{const c=calc(i);return[i.name,i.email,i.interviewer,i.role,i.date,i.round,i.status,c.answered,c.total==null?'':c.total.toFixed(2),c.verdict.label,REC[i.rec]||'',...PILLARS.map(P=>c.pil[P.k].avg==null?'':c.pil[P.k].avg.toFixed(2)),...[...QN].sort((a,b)=>a-b).map(n=>i.scores[n]||''),i.summary]});
+  const qs=[...QN].sort((a,b)=>a-b);
+  const head=['Candidate','Email','Interviewer','Role','Date','Round','Status','Scored','Weighted score','Verdict','Interviewer call',...PILLARS.map(P=>P.short+' avg'),...qs.map(n=>'Q'+n),'Summary'];
+  const rows=list.map(i=>{const c=calc(i);return[i.name,i.email,i.interviewer,i.role,i.date,i.round,i.status,c.answered,c.total==null?'':c.total.toFixed(2),c.verdict.label,REC[i.rec]||'',...PILLARS.map(P=>c.pil[P.k].avg==null?'':c.pil[P.k].avg.toFixed(2)),...qs.map(n=>i.scores[n]||''),i.summary]});
   return'\ufeff'+[head,...rows].map(r=>r.map(csvCell).join(',')).join('\r\n');
 }
 function download(name,text,type){
@@ -887,8 +1207,7 @@ $('#importFile').addEventListener('change',e=>{
   r.onload=()=>{
     let other;try{other=normalize(JSON.parse(r.result))}catch(err){toast('This file is not a KAM interview backup.','error');return}
     if(!other.interviews.length){toast('The backup has no interviews in it.','error');return}
-    other.interviews.forEach(i=>deleted.delete(i.id));
-    const res=mergeIn(other);saveDB();route();
+    const res=mergeIn(other);res.ids.forEach(id=>dirty.add(id));saveDirty();saveDB();queuePush(100);route();
     toast(`Restored backup: ${res.added} new, ${res.updated} updated, ${other.interviews.length-res.added-res.updated} already up to date.`);
   };
   r.onerror=()=>toast('Could not read that file.','error');
@@ -896,13 +1215,14 @@ $('#importFile').addEventListener('change',e=>{
 });
 
 /* ---------- Events ---------- */
-function closeMenus(){$$('.menu.open').forEach(m=>{m.classList.remove('open');m.querySelector('[data-act="menu"]').setAttribute('aria-expanded','false')})}
-document.addEventListener('click',e=>{
+function closeMenus(){$$('.menu.open').forEach(m=>{m.classList.remove('open');const b=m.querySelector('[data-act="menu"]');b&&b.setAttribute('aria-expanded','false')})}
+document.addEventListener('click',async e=>{
   const t=e.target;
   if(!t.closest('.menu'))closeMenus();
-  const {v,id}=currentView();const iv=(v==='i'||v==='r')?getIv(id):null;
-  const sb=t.closest('[data-score]');
-  if(sb&&iv){setScore(iv,+sb.closest('.qcard').dataset.n,+sb.dataset.score);return}
+  const{v,id}=currentView();const iv=(v==='i'||v==='r'||v==='h')?getIv(id):null;
+  const go=t.closest('[data-go]');if(go){closeMenus();location.hash=go.dataset.go;return}
+  const sb_=t.closest('[data-score]');
+  if(sb_&&iv){setScore(iv,+sb_.closest('.qcard').dataset.n,+sb_.dataset.score);return}
   const jp=t.closest('[data-jump]');
   if(jp){closeSheet();jumpTo('sec-'+jp.dataset.jump);return}
   const rc=t.closest('[data-rec]');
@@ -910,27 +1230,47 @@ document.addEventListener('click',e=>{
   const del=t.closest('[data-del]');
   if(del){
     const x=getIv(del.dataset.del);if(!x)return;
-    DB.interviews=DB.interviews.filter(i=>i.id!==x.id);deleted.add(x.id);saveDB();renderRowsOrList();
-    toast(`Deleted ${x.name}'s interview.`,'',{label:'Undo',fn:()=>{deleted.delete(x.id);if(!getIv(x.id))DB.interviews.push(x);saveDB();renderRowsOrList();toast('Restored.')}});
+    x.deleted=true;x.deletedAt=Date.now();touch(x);saveDB();route();
+    toast(`Moved ${x.name}'s interview to Recently deleted.`,'',{label:'Undo',fn:()=>{x.deleted=false;x.deletedAt=null;touch(x);saveDB();route()}});
     return;
+  }
+  const ud=t.closest('[data-undel]');
+  if(ud){const x=getIv(ud.dataset.undel);if(!x)return;x.deleted=false;x.deletedAt=null;touch(x);saveDB();toast(`Restored ${x.name}'s interview.`);route();return}
+  const rs=t.closest('[data-restore]');
+  if(rs&&iv){
+    const r=histRows.get(rs.dataset.restore);if(!r)return;
+    const s=cleanIv(Object.assign({},r.data,{id:iv.id}));if(!s)return;
+    s.deleted=false;s.deletedAt=null;
+    const k=DB.interviews.findIndex(i=>i.id===iv.id);DB.interviews[k]=s;touch(s);saveDB();await push();
+    toast(`Restored the version from ${fmtDT(r.changed_at)}.`);location.hash='#/i/'+encodeURIComponent(iv.id);return;
+  }
+  const ut=t.closest('[data-unteam]');
+  if(ut){
+    const email=ut.dataset.unteam;if(!confirm(`Remove ${email} from the interview team? They will lose access straight away.`))return;
+    const{error}=await sb.from('kam_team').delete().eq('email',email);
+    if(error){toast('Could not remove them. Check your connection.','error');return}
+    toast(`Removed ${email}.`);loadTeam();return;
   }
   if(t===$('#scrim')){closeSheet();return}
   const a=t.closest('[data-act]');if(!a)return;
   switch(a.dataset.act){
     case'menu':{const m=a.closest('.menu');const o=!m.classList.contains('open');closeMenus();if(o){m.classList.add('open');a.setAttribute('aria-expanded','true')}break}
-    case'csv':closeMenus();if(!DB.interviews.length){toast('Nothing to export yet.');break}download(`troopod-kam-interviews-${todayISO()}.csv`,toCSV(DB.interviews),'text/csv;charset=utf-8');break;
-    case'backup':closeMenus();download(`troopod-kam-backup-${todayISO()}.json`,JSON.stringify(DB,null,1),'application/json');toast('Backup downloaded. Keep it somewhere safe.');break;
+    case'csv':closeMenus();if(!live().length){toast('Nothing to export yet.');break}download(`troopod-kam-interviews-${todayISO()}.csv`,toCSV(live()),'text/csv;charset=utf-8');break;
+    case'backup':closeMenus();download(`troopod-kam-backup-${todayISO()}.json`,JSON.stringify(DB,null,1),'application/json');toast('Backup downloaded.');break;
     case'import':closeMenus();$('#importFile').click();break;
     case'clear':LS.q='';LS.status='all';viewList();break;
     case'finish':if(iv)finish(iv);break;
-    case'sheet':($('#panel').classList.contains('open')?closeSheet:openSheet)();break;
+    case'sheet':{const p=$('#panel');if(p&&p.classList.contains('open'))closeSheet();else openSheet();break}
     case'print':window.print();break;
     case'csv1':if(iv)download(`kam-${slug(iv.name)}-${iv.date}.csv`,toCSV([iv]),'text/csv;charset=utf-8');break;
+    case'signout':closeMenus();signOut();break;
+    case'loginmode':loginMode=loginMode==='in'?'up':'in';viewLogin();break;
+    case'clearform':ls.del(FORM_KEY);route();break;
+    case'cancelform':ls.del(FORM_KEY);location.hash=a.dataset.back||'#/';break;
   }
 });
-function renderRowsOrList(){if(currentView().v===''&&DB.interviews.length&&$('#rows')){viewList()}else route()}
 document.addEventListener('input',e=>{
-  const {v,id}=currentView();if(v!=='i')return;const iv=getIv(id);if(!iv)return;
+  const{v,id}=currentView();if(v!=='i')return;const iv=getIv(id);if(!iv)return;
   const t=e.target;
   if(t.dataset.note){const n=+t.dataset.note;const val=t.value.slice(0,4000);if(val)iv.notes[n]=val;else delete iv.notes[n];touch(iv)}
   else if(t.id==='summary'){iv.summary=t.value.slice(0,6000);touch(iv)}
@@ -944,13 +1284,31 @@ document.addEventListener('keydown',e=>{
   if(/^[1-4]$/.test(e.key)){e.preventDefault();if(iv.scores[n]!==+e.key)setScore(iv,n,+e.key);const b=card.querySelector(`[data-score="${e.key}"]`);b&&b.focus()}
   else if(e.key==='0'||e.key==='Backspace'||e.key==='Delete'){if(iv.scores[n]){e.preventDefault();setScore(iv,n,iv.scores[n])}}
 });
+window.addEventListener('pagehide',()=>{flushSave()});
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'){flushSave();if(dirty.size)push()}else sync()});
+window.addEventListener('beforeunload',e=>{flushSave();if(dirty.size&&cloudReady()){push();e.preventDefault();e.returnValue=''}});
+window.addEventListener('online',()=>sync());
+window.addEventListener('offline',()=>setSync('offline'));
+window.addEventListener('storage',e=>{
+  if(e.key===DIRTY_KEY){try{JSON.parse(e.newValue||'[]').forEach(id=>dirty.add(id))}catch(_){}return}
+  if(e.key!==KEY||saveTimer)return;
+  const r=mergeIn(readStore());if(r.added||r.updated)rerenderKeep(r.ids);
+});
 
 /* ---------- Boot ---------- */
-DB=readStore()||emptyDB();
-if(startNotice)setTimeout(()=>toast(startNotice,'error'),300);
-if(!storageOK)setTimeout(()=>toast('Storage is blocked in this browser. Back up before closing the tab.','error'),300);
-route();
+async function boot(){
+  DB=readStore()||emptyDB();
+  if(startNotice)setTimeout(()=>toast(startNotice,'error'),400);
+  if(!window.supabase||!window.supabase.createClient){cloud.mode='local';route();setSync('idle');return}
+  sb=window.supabase.createClient(SB_URL,SB_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:false,storageKey:'troopod-kam-auth'}});
+  sb.auth.onAuthStateChange(ev=>{if(ev==='SIGNED_OUT'&&cloud.user){cloud.user=null;cloud.member=null;cloud.owner=false;route()}else if(ev==='TOKEN_REFRESHED'&&dirty.size)queuePush(300)});
+  let session=null;try{session=(await sb.auth.getSession()).data.session}catch(e){}
+  if(session&&session.user)await afterSignIn(session.user);else{cloud.mode='cloud';route()}
+  setInterval(()=>{if(document.visibilityState==='visible')sync()},20000);
+}
+boot();
 })();
+
 </script>
 </body>
 </html>
