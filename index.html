@@ -438,6 +438,7 @@ const app=$('#app');
 /* ---------- Config ---------- */
 const SB_URL='https://ktropcqutvnbmekjindt.supabase.co';
 const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt0cm9wY3F1dHZuYm1la2ppbmR0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE4OTAwOTAsImV4cCI6MjA5NzQ2NjA5MH0.wE0gKMIEeZzX-XHTMcblkBZJVXKgbG5Y-KCnZ8VJ5zE';
+const GUEST_KEY='troopod-kam-guest-v1';
 const KEY='troopod-kam-interviews-v1',DIRTY_KEY='troopod-kam-dirty-v1',PULL_KEY='troopod-kam-lastpull-v1',MEMBER_KEY='troopod-kam-member-v1',FORM_KEY='troopod-kam-form-draft-v1',SYNCED_BY='troopod-kam-synced-by-v1';
 
 /* ---------- Device storage ---------- */
@@ -506,6 +507,14 @@ const live=()=>DB.interviews.filter(i=>!i.deleted);
 const getIv=id=>DB.interviews.find(i=>i.id===id);
 
 /* ---------- Cloud sync ---------- */
+async function cloudHealth(){
+  if(!navigator.onLine)return'offline';
+  try{
+    const ctl=new AbortController(),t=setTimeout(()=>ctl.abort(),8000);
+    const r=await fetch(SB_URL+'/auth/v1/health',{headers:{apikey:SB_KEY},signal:ctl.signal,cache:'no-store'});
+    clearTimeout(t);return r.ok?'up':'down';
+  }catch(e){return navigator.onLine?'down':'offline'}
+}
 const cloud={mode:'loading',user:null,email:'',member:null,owner:false,state:'idle',last:null,msg:''};
 let sb=null,pushTimer=null,pushing=false,pushAgain=false,retry=0,retryTimer=null,syncing=false;
 const dirty=new Set((()=>{try{const a=JSON.parse(ls.get(DIRTY_KEY)||'[]');return Array.isArray(a)?a:[]}catch(e){return[]}})());
@@ -516,6 +525,8 @@ function setSync(state,msg){
   cloud.state=state;if(msg!=null)cloud.msg=msg;
   let text,cls='';
   if(cloud.mode==='local'){text='Saved on this device only';cls='warn'}
+  else if(cloud.mode==='guest'){text='Saved on this device. Sign in later to upload';cls='warn'}
+  else if(state==='asleep'){text='Cloud asleep, saved on this device';cls='warn'}
   else if(state==='synced'){text='Saved to cloud'+(cloud.last?' '+fmtTime(cloud.last):'')}
   else if(state==='pending'||state==='syncing'){text='Saving'}
   else if(state==='offline'){text='Offline, saved on this device';cls='warn'}
@@ -588,7 +599,10 @@ async function sync(full){
 }
 function handleCloudError(e){
   const m=(e&&(e.message||e.error_description||e.hint))||String(e),code=e&&e.code;
-  if(!navigator.onLine||/failed to fetch|networkerror|load failed|network request/i.test(m)){setSync('offline');return'offline'}
+  if(!navigator.onLine||/failed to fetch|networkerror|load failed|network request/i.test(m)){
+    if(!navigator.onLine)setSync('offline');else cloudHealth().then(h=>setSync(h==='down'?'asleep':'offline'));
+    return'offline';
+  }
   if(code==='PGRST301'||/jwt|token is expired|invalid claim/i.test(m)){
     sb.auth.refreshSession().then(({error})=>{if(error){setSync('expired');toast('Your sign-in expired. Sign in again; your changes are kept on this device.','error')}else queuePush(300)});
     return'expired';
@@ -704,17 +718,19 @@ function notFound(iv){
 function banners(){
   let b='';
   if(cloud.mode==='local')b+='<div class="banner">Cloud saving could not load (no internet, or a blocker). Interviews are saved on this device only until the page loads with a connection.</div>';
+  if(cloud.mode==='guest')b+=`<div class="banner">You are working on this device without signing in because the cloud was unreachable. Everything is kept here. <button type="button" class="linkbtn" data-act="tosignin">Sign in to upload</button> once it is back${dirty.size?` (${dirty.size} interview${dirty.size>1?'s':''} waiting)`:''}.</div>`;
   if(!storageOK)b+='<div class="banner">This browser blocks device storage (private window or an in-app browser). Everything still saves to the cloud while you are online.</div>';
   return b;
 }
 function renderAccount(){
-  document.body.dataset.auth=(cloud.mode==='local'||(cloud.user&&cloud.member!==false))?'in':'out';
+  document.body.dataset.auth=(cloud.mode==='local'||cloud.mode==='guest'||(cloud.user&&cloud.member!==false))?'in':'out';
   const el=$('#acct-list');if(!el)return;
   const trash=DB?DB.interviews.filter(i=>i.deleted).length:0;
   el.innerHTML=(cloud.user?`<div class="menu-who">Signed in as<br><b>${esc(cloud.email)}</b></div>`:'')+
     (cloud.owner?`<button type="button" role="menuitem" data-go="#/team">Team access<small>Who can see and score interviews</small></button>`:'')+
     `<button type="button" role="menuitem" data-go="#/trash">Recently deleted${trash?' ('+trash+')':''}<small>Restore deleted interviews</small></button>`+
-    (cloud.user?`<button type="button" role="menuitem" data-act="signout">Sign out</button>`:'');
+    (cloud.user?`<button type="button" role="menuitem" data-act="signout">Sign out</button>`:'')+
+    (cloud.mode==='guest'?`<button type="button" role="menuitem" data-act="tosignin">Sign in to upload<small>Sends everything on this device to the cloud</small></button>`:'');
   setSync(cloud.state);
 }
 
@@ -731,6 +747,7 @@ function viewLogin(){
       <div class="field"><label for="l-email">Email</label><input class="input" id="l-email" type="email" autocomplete="username" inputmode="email" maxlength="120"></div>
       <div class="field"><label for="l-pw">Password</label><input class="input" id="l-pw" type="password" autocomplete="${up?'new-password':'current-password'}" maxlength="72"></div>
       ${up?'<div class="field"><label for="l-pw2">Repeat password</label><input class="input" id="l-pw2" type="password" autocomplete="new-password" maxlength="72"></div>':''}
+      <div id="l-health"></div>
       <div class="err" id="l-err" role="alert"></div>
       <button class="btn primary" type="submit" id="l-sub" style="width:100%;margin-top:8px">${up?'Create account and sign in':'Sign in'}</button>
     </form>
@@ -739,6 +756,21 @@ function viewLogin(){
   </div></section>`;
   $('#lf').addEventListener('submit',doLogin);
   setTimeout(()=>$('#l-email').focus(),30);
+  checkLoginHealth();
+}
+let healthTimer=null;
+async function checkLoginHealth(){
+  clearTimeout(healthTimer);
+  const box=$('#l-health');if(!box)return;
+  const h=await cloudHealth();
+  if(!$('#l-health'))return;
+  if(h==='up'){
+    if(box.dataset.was==='down')toast('The cloud is back. Sign in now.');
+    box.innerHTML='';box.dataset.was='up';return;
+  }
+  box.dataset.was='down';
+  box.innerHTML=`<div class="banner" style="margin:4px 0 16px">${h==='offline'?'You are offline, so sign-in cannot reach the cloud.':'The interview database is asleep. The free Supabase plan pauses it after a week without use. Vinit can wake it from the Supabase dashboard with Restore project; it takes about 3 minutes.'} You can still run the interview: everything is kept on this device and uploads when you sign in later.<br><button type="button" class="btn sm" data-act="guest" style="margin-top:10px">Work on this device for now</button></div>`;
+  healthTimer=setTimeout(checkLoginHealth,20000);
 }
 async function doLogin(e){
   e.preventDefault();
@@ -758,8 +790,9 @@ async function doLogin(e){
     }
     const r=await sb.auth.signInWithPassword({email,password:pw});
     if(r.error)throw r.error;
+    ls.del(GUEST_KEY);
     await afterSignIn(r.data.user);
-  }catch(x){err(authMsg(x))}
+  }catch(x){const h=await cloudHealth();if(h!=='up'){checkLoginHealth();err(h==='offline'?'No connection. Check your internet and try again.':'The cloud database is asleep, so sign-in cannot work yet. See the note above.')}else err(authMsg(x))}
   finally{if(btn.isConnected){btn.disabled=false;btn.textContent=up?'Create account and sign in':'Sign in'}}
 }
 function authMsg(x){
@@ -1265,6 +1298,8 @@ document.addEventListener('click',async e=>{
     case'csv1':if(iv)download(`kam-${slug(iv.name)}-${iv.date}.csv`,toCSV([iv]),'text/csv;charset=utf-8');break;
     case'signout':closeMenus();signOut();break;
     case'loginmode':loginMode=loginMode==='in'?'up':'in';viewLogin();break;
+    case'guest':ls.set(GUEST_KEY,'1');cloud.mode='guest';clearTimeout(healthTimer);route();setSync('idle');toast('Working on this device. Nothing is lost; it uploads when you sign in.');break;
+    case'tosignin':closeMenus();cloud.mode='cloud';route();break;
     case'clearform':ls.del(FORM_KEY);route();break;
     case'cancelform':ls.del(FORM_KEY);location.hash=a.dataset.back||'#/';break;
   }
@@ -1303,8 +1338,17 @@ async function boot(){
   sb=window.supabase.createClient(SB_URL,SB_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:false,storageKey:'troopod-kam-auth'}});
   sb.auth.onAuthStateChange(ev=>{if(ev==='SIGNED_OUT'&&cloud.user){cloud.user=null;cloud.member=null;cloud.owner=false;route()}else if(ev==='TOKEN_REFRESHED'&&dirty.size)queuePush(300)});
   let session=null;try{session=(await sb.auth.getSession()).data.session}catch(e){}
-  if(session&&session.user)await afterSignIn(session.user);else{cloud.mode='cloud';route()}
-  setInterval(()=>{if(document.visibilityState==='visible')sync()},20000);
+  if(session&&session.user)await afterSignIn(session.user);
+  else if(ls.get(GUEST_KEY)==='1'&&(await cloudHealth())!=='up'){cloud.mode='guest';route();setSync('idle')}
+  else{
+    cloud.mode='cloud';route();
+    if(ls.get(GUEST_KEY)==='1'&&dirty.size)toast(`The cloud is back. Sign in to upload ${dirty.size} interview${dirty.size>1?'s':''} from this device.`);
+  }
+  setInterval(async()=>{
+    if(document.visibilityState!=='visible')return;
+    if(cloud.mode==='guest'){if(!cloud.nudged&&(await cloudHealth())==='up'){cloud.nudged=true;toast('The cloud is back. Sign in to upload your interviews.','',{label:'Sign in',fn:()=>{cloud.mode='cloud';route()}})}return}
+    sync();
+  },20000);
 }
 boot();
 })();
