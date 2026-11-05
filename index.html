@@ -285,6 +285,8 @@ body[data-auth="out"] .auth-only{display:none !important}
 @media (max-width:760px){.top-sync{display:none}}
 @media (max-width:600px){#nav-list{display:none}.teamgrid{grid-template-columns:1fr}.auth-card{padding:24px;margin-top:3vh}.hlist li{flex-direction:column;align-items:flex-start}}
 
+.prog .conf{font-size:11px;color:var(--faint);border:1px solid var(--line-2);border-radius:999px;padding:1px 8px}
+.gates .na b{color:var(--faint)}
 /* Toasts */
 #toasts{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(24px + env(safe-area-inset-bottom,0px));z-index:80;display:flex;flex-direction:column;gap:8px;align-items:center;width:min(92vw,520px);pointer-events:none}
 .toast{pointer-events:auto;background:var(--raise-2);border:1px solid var(--line-2);border-radius:var(--r);padding:12px 16px;font-size:14px;display:flex;gap:16px;align-items:center;justify-content:space-between;width:100%;box-shadow:0 12px 40px rgba(0,0,0,.6)}
@@ -371,10 +373,11 @@ body[data-auth="out"] .auth-only{display:none !important}
 
 /* ---------- Content ---------- */
 const PILLARS=[
-  {k:'hunger',name:'Hunger and staying power',short:'Hunger',w:25,mins:15,why:'Decides the hire. Listen for a pattern across their journey, not one good answer.'},
-  {k:'cro',name:'CRO',short:'CRO',w:20,mins:13,why:'Diagnose before prescribing: find the leak, name the barrier, sell a fix the client approves.'},
+  {k:'hunger',name:'Hunger and staying power',short:'Hunger',w:20,mins:15,why:'Decides the hire. Listen for a pattern across their journey, not one good answer.'},
+  {k:'cro',name:'CRO',short:'CRO',w:15,mins:13,why:'Diagnose before prescribing: find the leak, name the barrier, sell a fix the client approves.'},
   {k:'design',name:'Design',short:'Design',w:10,mins:12,why:'Sees what is wrong on a screen in seconds and gives feedback a designer can act on.'},
-  {k:'analytics',name:'Analytics',short:'Analytics',w:20,mins:15,why:'Breaks revenue into sessions, conversion and AOV without thinking, and stays calm when numbers disagree.'},
+  {k:'analytics',name:'Analytics',short:'Analytics',w:15,mins:15,why:'Breaks revenue into sessions, conversion and AOV without thinking, and stays calm when numbers disagree.'},
+  {k:'logic',name:'Logic and numbers',short:'Logic',w:15,mins:10,why:'Raw reasoning: percentages, funnels, unit economics and logic traps. Each has one right answer, so score it as 4 right, fast and explains the method; 3 right; 2 right only with help; 1 wrong. Pick 3 to 5.'},
   {k:'ai',name:'AI usage',short:'AI usage',w:15,mins:12,why:'Uses AI daily as leverage and checks its output.'},
   {k:'client',name:'Client handling',short:'Client',w:10,mins:5,why:'Protects the retainer and grows it.'}
 ];
@@ -405,6 +408,21 @@ const QS=[
   {n:20,p:'analytics',q:'Conversion rate went up but revenue went down. What happened?',good:'AOV fell (discounts, cheaper product mix) or traffic fell; checks both.',bad:'Confused, or says it cannot happen.'},
   {n:21,p:'analytics',q:'GA4 shows 1,000 purchases, Shopify shows 1,240. Which do you trust, and how do you explain the gap to the client?',good:'Shopify for orders; GA4 under-counts because of consent, ad blockers and tagging; reconciles before reporting.',bad:'Picks one with no reason.'},
   {n:22,p:'analytics',q:'Tell me about a decision you made with incomplete data. What did you assume, and were you right?',good:'States the assumption, how they tested it, and what they changed after.',bad:'"I always wait for full data."'},
+
+  {n:31,p:'logic',tag:'Mental math',q:'A product\u2019s price goes up 20%, then a sale cuts it by 20%. Is it back to the original price? What is the net change?',good:'No. It ends 4% lower (1.2 x 0.8 = 0.96). Answers within 30 seconds.',bad:'"Yes, back to the same price."'},
+  {n:32,p:'logic',tag:'Mental math',q:'A sale gives flat 30% off, then an extra 20% off at checkout. What is the total discount?',good:'44% off (0.7 x 0.8 = 0.56 of the price). Knows discounts multiply, they do not add.',bad:'"50%."'},
+  {n:33,p:'logic',tag:'Mental math',q:'10,000 visitors. 40% view a product page, 10% of those add to cart, and 50% of carts check out. How many orders, and what is the conversion rate?',good:'200 orders, 2% conversion (10,000 to 4,000 to 400 to 200).',bad:'Adds the percentages, or loses track of the base at each step.'},
+  {n:34,p:'logic',tag:'Mental math',q:'Same funnel. Option A doubles the add-to-cart rate. Option B cuts cart abandonment from 50% to 25%. Which brings more orders?',good:'A: 400 orders against B: 300. Works it out rather than guessing.',bad:'Picks B because "abandonment is the bigger problem", with no maths.'},
+  {n:35,p:'logic',tag:'Mental math',q:'Gross margin is 40%. We run a 10% discount. By how much must unit sales rise to earn the same gross profit?',good:'About 33% more units. On a Rs 100 price, profit per unit drops from 40 to 30, and 40 / 30 = 1.33.',bad:'"10% more units."'},
+  {n:36,p:'logic',tag:'Mental math',q:'We spend Rs 1 lakh on ads and get 250 orders at Rs 1,600 AOV, on a 50% gross margin. What are ROAS and CAC, and is the first order profitable?',good:'ROAS 4 (Rs 4 lakh revenue), CAC Rs 400. Gross profit is Rs 800 an order, so yes: about Rs 400 left per order before shipping and returns.',bad:'Mixes up ROAS and CAC, or forgets the margin.'},
+  {n:37,p:'logic',tag:'Mental math',q:'Mobile converts at 1% on 90,000 sessions; desktop at 4% on 10,000 sessions. What is the overall conversion rate? A colleague says 2.5%. What did they get wrong?',good:'1.3% (900 + 400 = 1,300 orders on 100,000 sessions). The colleague averaged the two rates without weighting by traffic.',bad:'Agrees with 2.5%.'},
+  {n:38,p:'logic',q:'A/B test: control gets 50 orders from 2,000 visitors; the variant gets 60 from 2,000. Is the variant 20% better? Would you ship it?',good:'Yes, a 20% relative lift (2.5% to 3.0%), but it is only 10 extra orders, too few to trust. Keeps the test running before shipping.',bad:'Ships it straight away because 20% sounds big.'},
+  {n:39,p:'logic',tag:'Logic',q:'Three boxes are labelled Rings, Earrings and Mixed. Every label is wrong. You may take one item from one box without looking inside. Which box do you take it from to fix all three labels?',good:'The box labelled Mixed. It must hold only one kind, so the item names it; the other two then follow, because their labels are wrong too.',bad:'Guesses, or says you would need to open more than one box.'},
+  {n:40,p:'logic',tag:'Logic',q:'Every client who renewed with us had a weekly report. Riya\u2019s client had a weekly report. Did Riya\u2019s client renew?',good:'Not necessarily. Renewals had reports, but a report does not prove a renewal. Spots the reversed logic.',bad:'"Yes."'},
+  {n:41,p:'logic',tag:'Estimation',q:'A jewellery brand does Rs 1 crore a month. Roughly how many orders is that, and how many site sessions does it need?',good:'Picks an AOV (say Rs 2,000) to get about 5,000 orders, then a conversion rate (say 1.5%) to get about 3.3 lakh sessions. Clear assumptions matter more than the exact number.',bad:'Refuses to estimate without data, or gives a number with no assumptions.'},
+  {n:42,p:'logic',tag:'Logic',q:'Weekly orders went 120, 132, 145, 160. If the pattern holds, what comes next, and what is the growth rate?',good:'About 176. Each week is roughly 10% more than the last (120 x 1.1 = 132, 160 x 1.1 = 176).',bad:'Cannot find a pattern, or guesses without checking.'},
+  {n:43,p:'logic',tag:'Mental math',q:'12% of all orders are returned. COD is 60% of orders and returns at 15%. What is the return rate on prepaid orders?',good:'7.5%. COD gives 0.6 x 15% = 9 points of the 12, leaving 3 points across the 40% prepaid share: 3 / 0.4 = 7.5%.',bad:'Says 9% or 12%, or cannot set it up.'},
+  {n:44,p:'logic',tag:'Mental math',q:'One designer builds a product page in 6 days, another in 3 days. Working together, how long would one page take? Would it really take that long?',good:'2 days (1/6 + 1/3 = half a page a day). Then adds that splitting one page costs handover time, so plan for a bit more.',bad:'"4.5 days" (averaging) or "9 days".'},
 
   {n:1,p:'ai',q:'Walk me through the last real work task you did with AI, end to end: tool, prompt, what you threw away from the output, and what shipped.',good:'Names the tool, iterated two or three times, edited the output, verified facts before sending.',bad:'"I use it to write emails." No iteration, no editing.'},
   {n:2,p:'ai',tag:'Live task',q:'Here is a PDP. In 3 minutes, type the prompt you would give Claude to produce a CRO audit a client would pay for.',good:'Gives context (brand, AOV, audience, traffic source), asks for prioritised issues with evidence from the page, sets the output format.',bad:'"Audit this page."'},
@@ -457,7 +475,7 @@ function cleanIv(x){
   }
   const t=(x.tenure===''||x.tenure==null||isNaN(+x.tenure))?null:Math.max(0,Math.min(480,Math.round(+x.tenure)));
   let status=x.status==='completed'?'completed':'draft';
-  if(status==='completed'&&Object.keys(scores).length<QN.length)status='draft';
+  if(status==='completed'&&!Object.keys(scores).length)status='draft';
   return{
     id:String(x.id).slice(0,64),name:str(x.name,80)||'Unnamed candidate',email:str(x.email,120).toLowerCase(),
     interviewer:str(x.interviewer,60),role:str(x.role,60)||'Key Account Manager',
@@ -623,7 +641,6 @@ function combine(l,r){
   }
   if(l.summary&&l.summary!==r.summary)m.summary=!r.summary||l.summary.includes(r.summary)?l.summary:r.summary.includes(l.summary)?r.summary:l.summary+'\n'+r.summary;
   if(l.rec)m.rec=l.rec;
-  if(Object.keys(m.scores).length<QN.length){m.status='draft';m.completedAt=null}
   m.updatedAt=Date.now();
   return cleanIv(m);
 }
@@ -658,22 +675,28 @@ function calc(iv){
     pil[P.k]={avg:vals.length?vals.reduce((a,b)=>a+b,0)/vals.length:null,done:vals.length,total:qs.length};
   }
   let ws=0,wt=0;for(const P of PILLARS)if(pil[P.k].avg!=null){ws+=pil[P.k].avg*P.w;wt+=P.w}
-  const total=wt?ws/wt:null,complete=answered===QN.length;
+  const total=wt?ws/wt:null,complete=iv.status==='completed';
   const scoredP=PILLARS.filter(P=>pil[P.k].avg!=null),low=scoredP.filter(P=>pil[P.k].avg<2.5);
+  const conf=!answered?null:answered<6?'Low':answered<15?'Medium':'High';
   const gates=[
     {label:'Weighted score 3.0 or higher',state:total==null?'pending':total>=3?'pass':'fail'},
-    {label:'No pillar below 2.5',state:low.length?'fail':scoredP.length?'pass':'pending',detail:low.map(P=>P.short).join(', ')},
-    {label:'Hunger 3.0 or higher',state:pil.hunger.avg==null?'pending':pil.hunger.avg>=3?'pass':'fail'}
+    {label:'No pillar asked scores below 2.5',state:low.length?'fail':scoredP.length?'pass':'pending',detail:low.map(P=>P.short).join(', ')},
+    {label:'Hunger 3.0 or higher',state:pil.hunger.avg==null?(answered?'na':'pending'):pil.hunger.avg>=3?'pass':'fail'}
   ];
   const pauses=PAUSES.filter(([n])=>s[n]===1).map(([,t])=>t);
   const anyFail=gates.some(g=>g.state==='fail');
   let v;
   if(!answered)v={key:'none',label:'Not scored yet',tone:'muted',why:'Score the first answer to see a verdict.'};
   else if(pauses.length)v={key:'pause',label:complete?'Pause for a reference check':'Pause flagged',tone:'amber',why:'Call their last manager before deciding.'};
-  else if(anyFail)v={key:'no',label:complete?'No hire':'Below the bar so far',tone:'red',why:complete?'At least one gate failed.':'A gate is failing on the answers so far.'};
-  else if(complete)v={key:'hire',label:'Hire',tone:'purple',why:'All three gates pass and nothing triggered a pause.'};
-  else v={key:'track',label:'On track so far',tone:'purple',why:'Every gate passes on the answers scored so far.'};
-  return{pil,total,answered,complete,gates,pauses,verdict:v};
+  else if(anyFail)v={key:'no',label:complete?'No hire':'Below the bar so far',tone:'red',why:'A gate fails on the questions you asked.'};
+  else if(complete)v={key:'hire',label:'Hire',tone:'purple',why:'Every gate passes on the questions you asked, and nothing triggered a pause.'+(pil.hunger.avg==null?' Hunger was not assessed.':'')};
+  else v={key:'track',label:'On track to hire',tone:'purple',why:'Every gate passes on the questions asked so far.'};
+  if(complete&&conf==='Low'&&(v.key==='hire'||v.key==='no')){v.label=v.key==='hire'?'Leaning hire':'Leaning no hire';v.why+=` Only ${answered} answer${answered>1?'s':''}, so ask a few more before deciding.`}
+  return{pil,total,answered,complete,gates,pauses,verdict:v,conf,assessed:scoredP.length,notAssessed:PILLARS.filter(P=>pil[P.k].avg==null)};
+}
+function basis(c){
+  if(!c.answered)return'Nothing scored yet. Score only the questions you ask.';
+  return`Based on ${c.answered} answer${c.answered>1?'s':''} across ${c.assessed} of ${PILLARS.length} pillars. ${c.conf} confidence.`;
 }
 function rememberInterviewer(name){
   if(!name)return;DB.lastInterviewer=name;
@@ -893,14 +916,14 @@ function filtered(){
 function renderRows(){
   const el=$('#rows');if(!el)return;const list=filtered();
   if(!list.length){el.innerHTML=`<div class="empty" style="margin-top:16px"><h3>No candidate matches</h3><p>Try another name or switch the status filter.</p><button class="btn" type="button" data-act="clear">Clear filters</button></div>`;return}
-  el.innerHTML=`<div class="row head"><span>Candidate</span><span>Interviewer and date</span><span>Progress</span><span>Score</span><span>Verdict</span><span></span></div>`+list.map(i=>{
+  el.innerHTML=`<div class="row head"><span>Candidate</span><span>Interviewer and date</span><span>Asked</span><span>Score</span><span>Verdict</span><span></span></div>`+list.map(i=>{
     const c=calc(i);
     return`<div class="row">
       <div class="who"><a href="#/i/${encodeURIComponent(i.id)}"><strong>${esc(i.name)}</strong><span>${esc(i.email)}</span></a></div>
       <div class="meta-c"><span class="meta">${esc(i.interviewer)||'No interviewer'}</span><span class="meta">${fmtDate(i.date)}${i.round>1?', round '+i.round:''}</span></div>
-      <div class="prog"><div class="track"><i style="width:${c.answered/QN.length*100}%"></i></div><span class="num">${c.answered}/${QN.length}</span></div>
+      <div class="prog"><span class="num">${c.answered} answer${c.answered===1?'':'s'}</span>${c.conf?`<span class="conf">${c.conf}</span>`:''}</div>
       <div class="score-cell num">${fmtS(c.total)}</div>
-      <div class="v"><span class="pill tone-${c.verdict.tone}">${esc(c.verdict.label)}</span><span class="status">${i.status==='completed'?'Completed':c.complete?'Ready to finish':'Draft'}${dirty.has(i.id)?', saving':''}</span></div>
+      <div class="v"><span class="pill tone-${c.verdict.tone}">${esc(c.verdict.label)}</span><span class="status">${i.status==='completed'?'Completed':'Draft'}${dirty.has(i.id)&&cloud.mode==='cloud'?', saving':''}</span></div>
       <div class="acts no-print"><a class="btn ghost sm" href="#/r/${encodeURIComponent(i.id)}">Report</a><button class="btn danger sm" type="button" data-del="${esc(i.id)}" aria-label="Delete interview with ${esc(i.name)}">Delete</button></div>
     </div>`}).join('');
 }
@@ -912,7 +935,7 @@ function board(all){
   for(let t=0;t<=4;t++)s+=`<line class="grid" x1="${x(t)}" x2="${x(t)}" y1="${top-6}" y2="${H-4}"/><text class="tick" x="${x(t)}" y="${top-12}" text-anchor="middle">${t}</text>`;
   rows.forEach((r,k)=>{
     const y=top+k*rh,nm=r.i.name.length>24?r.i.name.slice(0,23)+'\u2026':r.i.name,tone=r.c.verdict.tone;
-    s+=`<a href="#/r/${encodeURIComponent(r.i.id)}"><text class="lab" x="0" y="${y+15}">${esc(nm)}</text><text class="sublab" x="0" y="${y+28}">${r.i.status==='draft'?(r.c.complete?'Ready to finish':'Draft, '+r.c.answered+' of 30'):esc(r.c.verdict.label)}</text>
+    s+=`<a href="#/r/${encodeURIComponent(r.i.id)}"><text class="lab" x="0" y="${y+15}">${esc(nm)}</text><text class="sublab" x="0" y="${y+28}">${r.i.status==='draft'?'Draft, '+r.c.answered+' answers':esc(r.c.verdict.label)+', '+r.c.answered+' answers'}</text>
       <rect class="b-${tone}" x="${left}" y="${y+6}" width="${Math.max(2,x(r.c.total)-left)}" height="16" rx="3"/>
       <text class="val" x="${x(r.c.total)+8}" y="${y+19}">${r.c.total.toFixed(2)}</text></a>`;
   });
@@ -1008,7 +1031,7 @@ function viewInterview(id){
     </div>
   </div>
   <div class="layout">
-    <nav class="pnav no-print" aria-label="Sections"><ol>${PILLARS.map((P,i)=>`<li><button type="button" data-jump="${P.k}"><span class="step">Step ${i+1}</span><b>${esc(P.short)}</b><small class="num" data-navc="${P.k}"></small></button></li>`).join('')}<li><button type="button" data-jump="wrap"><span class="step">Step 7</span><b>Wrap-up</b><small>Your call</small></button></li></ol></nav>
+    <nav class="pnav no-print" aria-label="Sections"><ol>${PILLARS.map((P,i)=>`<li><button type="button" data-jump="${P.k}"><span class="step">Step ${i+1}</span><b>${esc(P.short)}</b><small class="num" data-navc="${P.k}"></small></button></li>`).join('')}<li><button type="button" data-jump="wrap"><span class="step">Step ${PILLARS.length+1}</span><b>Wrap-up</b><small>Your call</small></button></li></ol></nav>
     <div>
       ${lowTen?`<div class="banner">Average tenure is ${iv.tenure} months, under the 18-month line. Probe Q23 and Q25 hard.</div>`:''}
       <div class="scale" aria-label="Scoring scale">${[1,2,3,4].map(k=>`<div><b>${k} ${SCALE[k][0]}</b>${SCALE[k][1]}</div>`).join('')}</div>
@@ -1044,44 +1067,39 @@ function qcard(iv,q){
     <details class="guide"><summary>Answer guide</summary><div class="guide-grid"><div class="g"><b>Strong answer</b>${esc(q.good)}</div><div class="r"><b>Red flag</b>${esc(q.bad)}</div></div></details>
   </article>`;
 }
-function gateList(c){return`<ul class="gates">${c.gates.map(g=>`<li class="${g.state}"><span>${esc(g.label)}${g.state==='fail'&&g.detail?': '+esc(g.detail):''}</span><b>${g.state==='pass'?'Pass':g.state==='fail'?'Fail':'Open'}</b></li>`).join('')}</ul>`}
+function gateList(c){return`<ul class="gates">${c.gates.map(g=>`<li class="${g.state}"><span>${esc(g.label)}${g.state==='fail'&&g.detail?': '+esc(g.detail):''}</span><b>${g.state==='pass'?'Pass':g.state==='fail'?'Fail':g.state==='na'?'Not asked':'Open'}</b></li>`).join('')}</ul>`}
 function refresh(iv){
   const c=calc(iv);
   for(const P of PILLARS){
-    const p=c.pil[P.k];const a=$(`[data-avg="${P.k}"]`);if(a)a.textContent=p.done?`${p.done} of ${p.total} scored, average ${p.avg.toFixed(2)}`:`${p.total} questions`;
-    const nv=$(`[data-navc="${P.k}"]`);if(nv)nv.textContent=`${p.done}/${p.total}${p.avg!=null?', '+p.avg.toFixed(1):''}`;
+    const p=c.pil[P.k];const a=$(`[data-avg="${P.k}"]`);if(a)a.textContent=p.done?`${p.done} asked, average ${p.avg.toFixed(2)}`:`${p.total} questions, ask any`;
+    const nv=$(`[data-navc="${P.k}"]`);if(nv)nv.textContent=p.done?`${p.done} asked, ${p.avg.toFixed(1)}`:'Not asked';
   }
   const sl=$('#statuslbl');if(sl)sl.textContent=iv.status==='completed'?'Completed':'Draft';
-  const left=QN.length-c.answered;
   const panel=$('#panel');
   if(panel)panel.innerHTML=`
     <div class="ps"><span class="big num">${fmtS(c.total)}</span><span class="of">out of 4</span></div>
-    <div class="pstate">${c.complete?'Final score':c.answered?`Provisional, ${c.answered} of ${QN.length} scored`:'Nothing scored yet'}</div>
+    <div class="pstate">${basis(c)}</div>
     <div class="verdict tone-${c.verdict.tone}" role="status">${esc(c.verdict.label)}<small>${esc(c.verdict.why)}</small></div>
     ${gateList(c)}
     ${c.pauses.length?`<div class="pauses"><p>Automatic pause</p><ul>${c.pauses.map(p=>`<li>${esc(p)}</li>`).join('')}</ul></div>`:''}
     <ul class="plist">${PILLARS.map(P=>{const p=c.pil[P.k],t=toneOf(p.avg);return`<li><button type="button" data-jump="${P.k}"><div class="pl"><span>${esc(P.short)} <span class="num" style="color:var(--faint)">${P.w}%</span></span><span class="num">${p.avg==null?'\u2013':p.avg.toFixed(2)}</span></div><div class="mini"><i style="width:${p.avg==null?0:p.avg/4*100}%;background:var(--${t==='muted'?'line-2':t})"></i><b style="left:62.5%"></b></div></button></li>`}).join('')}</ul>
     ${iv.status==='completed'?`<a class="btn primary" href="#/r/${encodeURIComponent(iv.id)}">View report</a><p class="left">Completed ${iv.completedAt?fmtDate(new Date(iv.completedAt).toISOString()):''}. Changes still save.</p>`
-      :`<button class="btn primary" type="button" data-act="finish">${left?'Finish interview':'Finish and see report'}</button><p class="left">${left?`${left} question${left>1?'s':''} left. Leave any time; it is saved as a draft.`:'All 30 scored.'}</p>`}
+      :`<button class="btn primary" type="button" data-act="finish">Finish interview</button><p class="left">${c.answered?'Only the questions you score count. Unasked ones are ignored.':'Score at least one answer to finish.'}</p>`}
     <p class="left syncstate"></p>`;
   const mb=$('#mbar');
-  if(mb)mb.innerHTML=`<button type="button" class="open-p" data-act="sheet" aria-controls="panel" aria-expanded="false"><span class="big num">${fmtS(c.total)}</span><span><span class="mv tone-${c.verdict.tone}">${esc(c.verdict.label)}</span><span class="mp num">${c.answered} of ${QN.length} scored. Tap for detail</span></span></button>${iv.status==='completed'?`<a class="btn primary sm" href="#/r/${encodeURIComponent(iv.id)}">Report</a>`:`<button class="btn primary sm" type="button" data-act="finish">Finish</button>`}`;
+  if(mb)mb.innerHTML=`<button type="button" class="open-p" data-act="sheet" aria-controls="panel" aria-expanded="false"><span class="big num">${fmtS(c.total)}</span><span><span class="mv tone-${c.verdict.tone}">${esc(c.verdict.label)}</span><span class="mp num">${c.answered} answer${c.answered===1?'':'s'}${c.conf?', '+c.conf.toLowerCase()+' confidence':''}. Tap for detail</span></span></button>${iv.status==='completed'?`<a class="btn primary sm" href="#/r/${encodeURIComponent(iv.id)}">Report</a>`:`<button class="btn primary sm" type="button" data-act="finish">Finish</button>`}`;
   setSync(cloud.state);
 }
 function setScore(iv,n,v){
   const card=$('#q-'+n);
   if(iv.scores[n]===v)delete iv.scores[n];else iv.scores[n]=v;
   if(card){card.classList.toggle('scored',!!iv.scores[n]);$$('[data-score]',card).forEach(b=>b.setAttribute('aria-checked',+b.dataset.score===iv.scores[n]))}
-  if(iv.status==='completed'&&!iv.scores[n]){iv.status='draft';iv.completedAt=null;toast(`Moved back to draft because Q${n} is now unscored.`)}
+  if(iv.status==='completed'&&!Object.keys(iv.scores).length){iv.status='draft';iv.completedAt=null;toast('Moved back to draft: no answers are scored.')}
   touch(iv);refresh(iv);
 }
 function finish(iv){
   const c=calc(iv);
-  if(!c.complete){
-    const first=QS.find(q=>!iv.scores[q.n]);
-    toast(`${QN.length-c.answered} still unscored. Jumping to Q${first.n}.`);
-    closeSheet();jumpTo('q-'+first.n,true);return;
-  }
+  if(!c.answered){toast('Score at least one answer before finishing.');return}
   iv.status='completed';iv.completedAt=Date.now();touch(iv);saveDB();push();
   toast('Interview completed.');location.hash='#/r/'+encodeURIComponent(iv.id);
 }
@@ -1106,8 +1124,8 @@ function pillarChart(c){
   for(let t=0;t<=4;t++)s+=`<line class="grid" x1="${x(t)}" x2="${x(t)}" y1="${top-6}" y2="${H-6}"/><text class="tick" x="${x(t)}" y="${top-12}" text-anchor="middle">${t}</text>`;
   PILLARS.forEach((P,k)=>{
     const y=top+k*rh,p=c.pil[P.k];
-    s+=`<text class="lab" x="0" y="${y+18}">${esc(P.short)}</text><text class="sublab" x="0" y="${y+33}">${P.w}% weight, ${p.done}/${p.total}</text>`;
-    s+=p.avg==null?`<text class="none" x="${left+6}" y="${y+24}">Not scored</text>`:`<rect class="b-${toneOf(p.avg)}" x="${left}" y="${y+10}" width="${Math.max(2,x(p.avg)-left)}" height="18" rx="3"/><text class="val" x="${x(p.avg)+8}" y="${y+24}">${p.avg.toFixed(2)}</text>`;
+    s+=`<text class="lab" x="0" y="${y+18}">${esc(P.short)}</text><text class="sublab" x="0" y="${y+33}">${P.w}% weight, ${p.done} asked</text>`;
+    s+=p.avg==null?`<text class="none" x="${left+6}" y="${y+24}">Not asked</text>`:`<rect class="b-${toneOf(p.avg)}" x="${left}" y="${y+10}" width="${Math.max(2,x(p.avg)-left)}" height="18" rx="3"/><text class="val" x="${x(p.avg)+8}" y="${y+24}">${p.avg.toFixed(2)}</text>`;
   });
   return s+`<line class="floor" x1="${x(2.5)}" x2="${x(2.5)}" y1="${top-6}" y2="${H-6}"/><line class="barline" x1="${x(3)}" x2="${x(3)}" y1="${top-6}" y2="${H-6}"/></svg>`;
 }
@@ -1119,7 +1137,7 @@ function viewReport(id){
   const strong=QS.filter(q=>iv.scores[q.n]===4),weak=QS.filter(q=>iv.scores[q.n]&&iv.scores[q.n]<=2).sort((a,b)=>iv.scores[a.n]-iv.scores[b.n]),open=QS.filter(q=>!iv.scores[q.n]);
   const best=PILLARS.filter(P=>c.pil[P.k].avg!=null).sort((a,b)=>c.pil[b.k].avg-c.pil[a.k].avg);
   const lo=best[best.length-1];
-  const lead=!c.answered?'Nothing has been scored yet.':`${c.complete?'Final':'Provisional'} score ${c.total.toFixed(2)} out of 4. Strongest pillar: ${best[0].short} (${c.pil[best[0].k].avg.toFixed(2)}).${best.length>1&&c.pil[lo.k].avg<c.pil[best[0].k].avg?` Weakest: ${lo.short} (${c.pil[lo.k].avg.toFixed(2)}).`:''}`;
+  const lead=!c.answered?'Nothing has been scored yet.':`Score ${c.total.toFixed(2)} out of 4. ${basis(c)} Strongest pillar: ${best[0].short} (${c.pil[best[0].k].avg.toFixed(2)}).${best.length>1&&c.pil[lo.k].avg<c.pil[best[0].k].avg?` Weakest: ${lo.short} (${c.pil[lo.k].avg.toFixed(2)}).`:''}`;
   const mismatch=iv.rec&&c.complete&&((iv.rec==='hire'&&c.verdict.key!=='hire')||(iv.rec==='no'&&c.verdict.key==='hire'));
   app.innerHTML=`<section class="page">
     ${banners()}
@@ -1128,14 +1146,13 @@ function viewReport(id){
       <div><h1>${esc(iv.name)}</h1><p class="sub">${esc(iv.email)}. ${esc(iv.role)}${iv.round>1?', round '+iv.round:''}. Interviewed by ${esc(iv.interviewer)} on ${fmtDate(iv.date)}. ${iv.status==='completed'?'Completed':'Draft'}.</p></div>
       <div class="iv-acts no-print"><a class="btn" href="#/i/${encodeURIComponent(iv.id)}">${iv.status==='completed'?'Edit scores':'Continue interview'}</a><a class="btn" href="#/h/${encodeURIComponent(iv.id)}">Version history</a><button class="btn" type="button" data-act="csv1">Export CSV</button><button class="btn primary" type="button" data-act="print">Download PDF</button></div>
     </div>
-    ${!c.complete&&c.answered?`<div class="banner">This is a draft. ${QN.length-c.answered} questions are unscored, so the verdict may change.</div>`:''}
     <div class="card"><div class="headline"><span class="big num">${fmtS(c.total)}</span><div class="verdict tone-${c.verdict.tone}">${esc(c.verdict.label)}<small>${esc(c.verdict.why)}</small></div></div><p class="sub" style="margin-top:16px">${esc(lead)}</p>
       ${iv.rec?`<p class="sub">Interviewer's call: <b style="color:var(--text)">${REC[iv.rec]}</b>.</p>`:''}
       ${mismatch?`<p class="mismatch">Your call differs from the scorecard. Write down why in the summary before deciding.</p>`:''}
     </div>
     <div class="rep-grid">
       <div class="card"><h2>Pillar scores</h2><p class="cap">Average of the 1 to 4 scores in each pillar.</p><div class="scroll">${pillarChart(c)}</div><div class="legend"><span>3.0 hire bar</span><span class="f">2.5 pillar floor</span></div></div>
-      <div class="card"><h2>Hire gates</h2><p class="cap">All three must pass, with no automatic pause.</p>
+      <div class="card"><h2>Hire gates</h2><p class="cap">All three must pass on the questions asked, with no automatic pause.</p>
         ${gateList(c).replace('class="gates"','class="gates" style="margin-top:0"')}
         ${c.pauses.length?`<div class="pauses"><p>Automatic pause</p><ul>${c.pauses.map(p=>`<li>${esc(p)}</li>`).join('')}</ul><p style="font-weight:400;margin:8px 0 0">Ask their last manager: would you hire them again, and why did they leave?</p></div>`:''}
         ${iv.tenure!=null?`<p class="sub" style="margin-top:14px">Average tenure ${iv.tenure} months${iv.tenure<18?', under the 18-month line':''}.</p>`:''}
@@ -1146,9 +1163,9 @@ function viewReport(id){
       <div class="card"><h2>Strengths</h2><p class="cap">Answers scored 4.</p>${strong.length?`<ul class="qlist">${strong.map(q=>qItem(iv,q)).join('')}</ul>`:'<p class="sub">No answer scored 4.</p>'}</div>
     </div>
     ${iv.summary?`<div class="card" style="margin-top:20px"><h2>Summary notes</h2><p style="white-space:pre-wrap;margin:10px 0 0">${esc(iv.summary)}</p></div>`:''}
-    ${open.length?`<div class="card" style="margin-top:20px"><h2>Not scored yet</h2><p class="cap">${open.length} question${open.length>1?'s':''}.</p><p class="sub">${open.map(q=>'Q'+q.n).join(', ')}</p></div>`:''}
-    <div class="card" style="margin-top:20px"><h2>Every answer</h2><p class="cap">In interview order.</p><div class="scroll"><table class="full"><thead><tr><th>#</th><th>Pillar</th><th>Question</th><th>Score</th><th>Notes</th></tr></thead><tbody>
-      ${QS.map(q=>`<tr><td class="n">Q${q.n}</td><td>${esc(PILLARS.find(P=>P.k===q.p).short)}</td><td>${esc(q.q)}</td><td><span class="sc s${iv.scores[q.n]||0}" style="display:inline-flex;width:24px;height:24px;border-radius:6px;align-items:center;justify-content:center;font-weight:600">${iv.scores[q.n]||'\u2013'}</span></td><td style="white-space:pre-wrap;color:var(--muted)">${esc(iv.notes[q.n]||'')}</td></tr>`).join('')}
+    ${c.answered&&c.notAssessed.length?`<div class="card" style="margin-top:20px"><h2>Not assessed</h2><p class="sub" style="margin:6px 0 0">No questions asked in ${c.notAssessed.map(P=>P.short).join(', ')}. These pillars do not count toward the score.</p></div>`:''}
+    <div class="card" style="margin-top:20px"><h2>Every answer</h2><p class="cap">Only the questions you asked, in interview order.</p><div class="scroll"><table class="full"><thead><tr><th>#</th><th>Pillar</th><th>Question</th><th>Score</th><th>Notes</th></tr></thead><tbody>
+      ${QS.filter(q=>iv.scores[q.n]||iv.notes[q.n]).map(q=>`<tr><td class="n">Q${q.n}</td><td>${esc(PILLARS.find(P=>P.k===q.p).short)}</td><td>${esc(q.q)}</td><td><span class="sc s${iv.scores[q.n]||0}" style="display:inline-flex;width:24px;height:24px;border-radius:6px;align-items:center;justify-content:center;font-weight:600">${iv.scores[q.n]||'\u2013'}</span></td><td style="white-space:pre-wrap;color:var(--muted)">${esc(iv.notes[q.n]||'')}</td></tr>`).join('')}
     </tbody></table></div></div>
   </section>`;
 }
@@ -1172,7 +1189,7 @@ async function viewHistory(id){
   histRows=new Map(data.map(r=>[String(r.hid),r]));
   box.innerHTML=`<ul class="hlist">${data.map((r,k)=>{
     const s=cleanIv(Object.assign({},r.data,{id}));const c=s?calc(s):null;
-    return`<li><div><b>${fmtDT(r.changed_at)}</b>${k===0?' <span class="pill tone-purple">Latest</span>':''}${r.deleted?' <span class="pill tone-red">Deleted</span>':''}<span class="meta">${esc(r.changed_by||'Unknown')}. ${c?`${c.answered} of 30 scored, score ${fmtS(c.total)}`:'Unreadable version'}</span></div>${k>0&&s?`<button class="btn sm" type="button" data-restore="${r.hid}">Restore this version</button>`:''}</li>`}).join('')}</ul>`;
+    return`<li><div><b>${fmtDT(r.changed_at)}</b>${k===0?' <span class="pill tone-purple">Latest</span>':''}${r.deleted?' <span class="pill tone-red">Deleted</span>':''}<span class="meta">${esc(r.changed_by||'Unknown')}. ${c?`${c.answered} answers, score ${fmtS(c.total)}`:'Unreadable version'}</span></div>${k>0&&s?`<button class="btn sm" type="button" data-restore="${r.hid}">Restore this version</button>`:''}</li>`}).join('')}</ul>`;
 }
 
 /* ---------- Recently deleted ---------- */
@@ -1182,7 +1199,7 @@ function viewTrash(){
   app.innerHTML=`<section class="page">${banners()}
     <a class="crumb" href="#/">Candidates</a>
     <div class="page-head" style="margin-top:10px"><div><h1>Recently deleted</h1><p class="sub">Deleted interviews are never erased. Restore one and it goes back to the candidate list with every score and note.</p></div></div>
-    ${list.length?`<div class="card"><ul class="hlist">${list.map(i=>{const c=calc(i);return`<li><div><b>${esc(i.name)}</b><span class="meta">${esc(i.email)}. Interviewed ${fmtDate(i.date)} by ${esc(i.interviewer)}. ${c.answered} of 30 scored. Deleted ${i.deletedAt?fmtDT(i.deletedAt):''}</span></div><button class="btn sm" type="button" data-undel="${esc(i.id)}">Restore</button></li>`}).join('')}</ul></div>`
+    ${list.length?`<div class="card"><ul class="hlist">${list.map(i=>{const c=calc(i);return`<li><div><b>${esc(i.name)}</b><span class="meta">${esc(i.email)}. Interviewed ${fmtDate(i.date)} by ${esc(i.interviewer)}. ${c.answered} answers. Deleted ${i.deletedAt?fmtDT(i.deletedAt):''}</span></div><button class="btn sm" type="button" data-undel="${esc(i.id)}">Restore</button></li>`}).join('')}</ul></div>`
       :'<div class="empty"><h2>Nothing deleted</h2><p>Interviews you delete land here, so you can bring them back.</p><a class="btn" href="#/">Back to candidates</a></div>'}
   </section>`;
 }
@@ -1225,8 +1242,8 @@ async function loadTeam(){
 function csvCell(v){let s=v==null?'':String(v);if(/^[=+\-@\t\r]/.test(s))s="'"+s;return/[",\n\r]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s}
 function toCSV(list){
   const qs=[...QN].sort((a,b)=>a-b);
-  const head=['Candidate','Email','Interviewer','Role','Date','Round','Status','Scored','Weighted score','Verdict','Interviewer call',...PILLARS.map(P=>P.short+' avg'),...qs.map(n=>'Q'+n),'Summary'];
-  const rows=list.map(i=>{const c=calc(i);return[i.name,i.email,i.interviewer,i.role,i.date,i.round,i.status,c.answered,c.total==null?'':c.total.toFixed(2),c.verdict.label,REC[i.rec]||'',...PILLARS.map(P=>c.pil[P.k].avg==null?'':c.pil[P.k].avg.toFixed(2)),...qs.map(n=>i.scores[n]||''),i.summary]});
+  const head=['Candidate','Email','Interviewer','Role','Date','Round','Status','Answers asked','Confidence','Weighted score','Verdict','Interviewer call',...PILLARS.map(P=>P.short+' avg'),...qs.map(n=>'Q'+n),'Summary'];
+  const rows=list.map(i=>{const c=calc(i);return[i.name,i.email,i.interviewer,i.role,i.date,i.round,i.status,c.answered,c.conf||'',c.total==null?'':c.total.toFixed(2),c.verdict.label,REC[i.rec]||'',...PILLARS.map(P=>c.pil[P.k].avg==null?'':c.pil[P.k].avg.toFixed(2)),...qs.map(n=>i.scores[n]||''),i.summary]});
   return'\ufeff'+[head,...rows].map(r=>r.map(csvCell).join(',')).join('\r\n');
 }
 function download(name,text,type){
